@@ -1,4 +1,4 @@
-# Predict Target Protein Structure with OpenFold2 and OpenFold2 + MSA-Search
+# Predict Target Protein Structures with OpenFold2 and OpenFold2 + MSA-Search
 
 [MSA-Search](https://docs.nvidia.com/nim/bionemo/msa-search/latest/overview.html) Multiple Sequence Alignment (MSA) compares a query amino acid sequence to protein databases, aligning similar sequences to identify conserved regions despite differences in length or motifs. The resulting alignments enhance structural prediction models like AlphaFold2 and OpenFold by leveraging the structural similarity of homologous sequences.
 
