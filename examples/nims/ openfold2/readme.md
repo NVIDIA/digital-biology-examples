@@ -12,7 +12,7 @@
    Visit [https://build.nvidia.com](https://build.nvidia.com) to create your `API_KEY`.
 
 2) **Run the Tutorial Notebooks** <BR>
-   [OpenFold2](OpenFold2_Predict_Target_Protein_Structure.ipynb) or [MSA-Search + OpenFold2](OpenFold2_Predict_Target_Protein_Structure.ipynb)
+   [OpenFold2](OpenFold2_MSA_Predict_Target_Protein_Structure.ipynb) or [MSA-Search + OpenFold2](OpenFold2_Predict_Target_Protein_Structure.ipynb)
 
 <P>
 
