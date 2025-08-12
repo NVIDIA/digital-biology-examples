@@ -6,12 +6,14 @@
 
 1) **Generate an `API_KEY`** <BR>
    Visit [https://build.nvidia.com](https://build.nvidia.com) to create your `API_KEY`.
-2) **MSA-Search NIM Notebook** <BR>
-   LINK INFO HERE.
+2) **Run the Tutorial Notebooks** <BR>
+   [MSA-Search](OpenFold2_MSA_Predict_Target_Protein_Structure.ipynb) or [Processing MSA-Search JSON file into an A3M file](OpenFold2_Predict_Target_Protein_Structure.ipynb)
+
+<P>
 
 ## Example Amino Acid Sequence
 
-**4WQP_1|Chain A|Nuclear receptor ROR-gamma|Homo sapiens (9606)**
+**[4WQP_1](https://www.rcsb.org/structure/4WQP) | Chain A | Nuclear receptor ROR-gamma | Homo sapiens (9606)**
 
 `MHHHHHHGENLYFQGSAPYASLTEIEHLVQSVCKSYRETCQLRLEDLLRQRSNIFSREEVTGYQRKSMWEMWERCAHHLTEAIQYVVEFAKRLSGFMELCQNDQIVLLKAGAMEVVLVRMCRAYNADNRTVFFEGKYGGMELFRALGCSELISSIFDFSHSLSALHFSEDEIALYTALVLINAHRPGLQEKRKVEQLQYNLELAFHHHLCKTHRQSILAKLPPKGKLRSLCSQHVERLQIFQHLHPIVVQAAFPPLYKELFSGNS`
 
