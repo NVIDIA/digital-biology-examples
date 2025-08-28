@@ -7,9 +7,9 @@
 1) **Generate an `API_KEY`** <BR>
    Visit [https://build.nvidia.com](https://build.nvidia.com) to create your `API_KEY`.
 2) **Run the Tutorial Notebooks** <BR>
-   a) [MSA-Search](OpenFold2_MSA_Predict_Target_Protein_Structure.ipynb)
-   b) [Processing MSA-Search JSON file into an A3M file](OpenFold2_Predict_Target_Protein_Structure.ipynb)
-   c) [MSA-Search](OpenFold2_MSA_Predict_Target_Protein_Structure.ipynb)
+   a) [Processing MSA-Search JSON file output into an A3M-format MSA file](MSASearch_NIM_ReFormatting_JSON_to_A3M.ipynb) <BR>
+   b) [MSA-Search NIM and create A3M-format MSA file](Colab_MSA_and_A3M_Output.ipynb) <BR>
+   c) [MSA-Search NIM across many different proteins in CSV file, and save outputs as A3M-format MSA files](Colab_Many_Proteins_MSASearch_to_A3M.ipynb) <BR>
 
 <P>
 
@@ -18,6 +18,8 @@
 **[4WQP_1](https://www.rcsb.org/structure/4WQP) | Chain A | Nuclear receptor ROR-gamma | Homo sapiens (9606)**
 
 `MHHHHHHGENLYFQGSAPYASLTEIEHLVQSVCKSYRETCQLRLEDLLRQRSNIFSREEVTGYQRKSMWEMWERCAHHLTEAIQYVVEFAKRLSGFMELCQNDQIVLLKAGAMEVVLVRMCRAYNADNRTVFFEGKYGGMELFRALGCSELISSIFDFSHSLSALHFSEDEIALYTALVLINAHRPGLQEKRKVEQLQYNLELAFHHHLCKTHRQSILAKLPPKGKLRSLCSQHVERLQIFQHLHPIVVQAAFPPLYKELFSGNS`
+
+*Note:* ensure that your sequence does not have any spaces nor carriage returns
 
 <P>
 
