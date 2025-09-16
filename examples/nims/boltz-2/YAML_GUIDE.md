@@ -6,7 +6,7 @@ This guide explains how to use YAML configuration files with the Boltz-2 Python 
 
 ## Overview
 
-The Boltz-2 Python Client supports the official YAML configuration format used by the [original Boltz repository](https://github.com/jwohlwend/boltz). This allows you to:
+The Boltz-2 Python Client supports the official YAML configuration format used by the original Boltz implementation. This allows you to:
 
 - Use existing Boltz YAML configurations without modification
 - Define complex molecular systems in a structured format
@@ -335,7 +335,7 @@ project/
 ## Compatibility
 
 ### Official Boltz Repository
-The YAML format is fully compatible with the [official Boltz repository](https://github.com/jwohlwend/boltz). You can:
+The YAML format is fully compatible with the official Boltz format. You can:
 - Use existing Boltz YAML files without modification
 - Share configurations between different Boltz implementations
 - Follow official Boltz documentation and examples
@@ -381,8 +381,8 @@ The `examples/` directory contains sample YAML files:
 
 ## Further Reading
 
-- [Official Boltz Repository](https://github.com/jwohlwend/boltz)
-- [Boltz-2 Technical Report](https://github.com/jwohlwend/boltz)
+- [Boltz-2 Python Client](https://github.com/NVIDIA/digital-biology-examples/tree/main/examples/nims/boltz-2)
+- [Boltz-2 Technical Report](https://cdn.prod.website-files.com/68404fd075dba49e58331ad9/6842ee1285b9af247ac5a122_boltz2.pdf)
 - [NVIDIA BioNeMo Documentation](https://docs.nvidia.com/bionemo/)
 
 ## Support
@@ -392,4 +392,9 @@ For issues with YAML configuration:
 2. Validate YAML syntax
 3. Verify MSA file paths
 4. Test with simple configurations first
-5. Check service health and connectivity 
+5. Check service health and connectivity
+---
+
+## Disclaimer
+
+This software is provided as-is without warranties of any kind. No guarantees are made regarding the accuracy, reliability, or fitness for any particular purpose. The underlying models and APIs are experimental and subject to change without notice. Users are responsible for validating all results and assessing suitability for their specific use cases.

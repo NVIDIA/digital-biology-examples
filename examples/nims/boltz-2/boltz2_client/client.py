@@ -35,6 +35,10 @@ from .exceptions import (
     Boltz2ClientError, Boltz2APIError, Boltz2ValidationError, 
     Boltz2TimeoutError, Boltz2ConnectionError
 )
+from .msa_search import (
+    MSASearchClient, MSASearchIntegration, MSASearchRequest,
+    MSASearchResponse, MSAFormatConverter
+)
 
 
 class EndpointType:
@@ -99,17 +103,21 @@ class Boltz2Client:
         # Set up URLs based on endpoint type
         if endpoint_type == EndpointType.NVIDIA_HOSTED:
             self.predict_url = f"{self.base_url}/v1/biology/mit/boltz2/predict"
-            self.health_url = f"{self.base_url}/v1/health/live"
+            self.health_url = f"{self.base_url}/v1/health/ready"
             self.ready_url = f"{self.base_url}/v1/health/ready"
-            self.metadata_url = f"{self.base_url}/v1/models"
+            self.metadata_url = f"{self.base_url}/v1/metadata"
             self.status_url = "https://api.nvcf.nvidia.com/v2/nvcf/pexec/status/{task_id}"
         else:
             # Local endpoints
             self.predict_url = f"{self.base_url}/biology/mit/boltz2/predict"
-            self.health_url = f"{self.base_url}/v1/health/live"
+            self.health_url = f"{self.base_url}/v1/health/ready"
             self.ready_url = f"{self.base_url}/v1/health/ready"
-            self.metadata_url = f"{self.base_url}/v1/models"
+            self.metadata_url = f"{self.base_url}/v1/metadata"
             self.status_url = None
+        
+        # Initialize MSA search client (optional)
+        self._msa_search_client = None
+        self._msa_search_integration = None
 
     def _get_headers(self, additional_headers: Optional[Dict[str, str]] = None) -> Dict[str, str]:
         """Get headers for requests based on endpoint type."""
@@ -271,6 +279,7 @@ class Boltz2Client:
         diffusion_samples: int = 1,
         step_scale: float = 1.638,
         msa_files: Optional[List[Tuple[str, AlignmentFormat]]] = None,
+        msa: Optional[Dict[str, Dict[str, AlignmentFileRecord]]] = None,
         **kwargs
     ) -> PredictionResponse:
         """
@@ -284,6 +293,7 @@ class Boltz2Client:
             diffusion_samples: Number of diffusion samples (1-5)
             step_scale: Step scale for diffusion (0.5-5.0)
             msa_files: List of (file_path, format) tuples for MSA files
+            msa: Pre-constructed MSA dictionary {database_name: {format: AlignmentFileRecord}}
             **kwargs: Additional parameters for predict()
             
         Returns:
@@ -295,24 +305,33 @@ class Boltz2Client:
         # which handles file saving, progress callbacks, and all other functionality
         
         # Build MSA records for proper integration
-        msa_records = None
-        if msa_files:
-            msa_records = []
-            for file_path, format_type in msa_files:
+        msa_dict = None
+        
+        # If msa is provided directly, use it
+        if msa:
+            msa_dict = msa
+        # Otherwise, if msa_files are provided, load from files
+        elif msa_files:
+            msa_dict = {}
+            for i, (file_path, format_type) in enumerate(msa_files):
                 with open(file_path, "r") as fh:
                     content = fh.read()
                 msa_record = AlignmentFileRecord(
                     alignment=content,
                     format=format_type,
-                    rank=len(msa_records)
+                    rank=i
                 )
-                msa_records.append(msa_record)
+                # Use database name as "default" or "msa_{i}"
+                db_name = f"msa_{i}" if len(msa_files) > 1 else "default"
+                if db_name not in msa_dict:
+                    msa_dict[db_name] = {}
+                msa_dict[db_name][format_type] = msa_record
         
         polymer = Polymer(
             id=polymer_id,
             molecule_type="protein",
             sequence=sequence,
-            msa=msa_records
+            msa=msa_dict
         )
         
         request = PredictionRequest(
@@ -335,10 +354,16 @@ class Boltz2Client:
         pocket_residues: Optional[List[int]] = None,
         recycling_steps: int = 3,
         sampling_steps: int = 50,
+        predict_affinity: bool = False,
+        sampling_steps_affinity: Optional[int] = None,
+        diffusion_samples_affinity: Optional[int] = None,
+        affinity_mw_correction: Optional[bool] = None,
+        msa_files: Optional[List[Tuple[str, AlignmentFormat]]] = None,
+        msa: Optional[Dict[str, Dict[str, AlignmentFileRecord]]] = None,
         **kwargs
     ) -> PredictionResponse:
         """
-        Predict protein-ligand complex structure.
+        Predict protein-ligand complex structure with optional MSA guidance.
         
         Args:
             protein_sequence: Protein sequence
@@ -349,24 +374,55 @@ class Boltz2Client:
             pocket_residues: List of residue indices defining binding pocket
             recycling_steps: Number of recycling steps
             sampling_steps: Number of sampling steps
+            predict_affinity: Enable affinity prediction for this ligand
+            sampling_steps_affinity: Sampling steps for affinity prediction
+            diffusion_samples_affinity: Diffusion samples for affinity prediction
+            affinity_mw_correction: Apply molecular weight correction to affinity
+            msa_files: List of (file_path, format) tuples for MSA files
+            msa: Pre-constructed MSA dictionary {database_name: {format: AlignmentFileRecord}}
             **kwargs: Additional parameters for predict()
             
         Returns:
-            Prediction response
+            Prediction response with structure and optionally affinity predictions
         """
         if not ligand_smiles and not ligand_ccd:
             raise Boltz2ValidationError("Must provide either ligand_smiles or ligand_ccd")
         
+        # Build MSA records if provided
+        msa_dict = None
+        
+        # If msa is provided directly, use it
+        if msa:
+            msa_dict = msa
+        # Otherwise, if msa_files are provided, load from files
+        elif msa_files:
+            msa_dict = {}
+            for i, (file_path, format_type) in enumerate(msa_files):
+                with open(file_path, "r") as fh:
+                    content = fh.read()
+                msa_record = AlignmentFileRecord(
+                    alignment=content,
+                    format=format_type,
+                    rank=i
+                )
+                # Use database name as "default" or "msa_{i}"
+                db_name = f"msa_{i}" if len(msa_files) > 1 else "default"
+                if db_name not in msa_dict:
+                    msa_dict[db_name] = {}
+                msa_dict[db_name][format_type] = msa_record
+        
         polymer = Polymer(
             id=protein_id,
             molecule_type="protein",
-            sequence=protein_sequence
+            sequence=protein_sequence,
+            msa=msa_dict
         )
         
         ligand = Ligand(
             id=ligand_id,
             smiles=ligand_smiles,
-            ccd=ligand_ccd
+            ccd=ligand_ccd,
+            predict_affinity=predict_affinity
         )
         
         constraints = []
@@ -387,6 +443,12 @@ class Boltz2Client:
             recycling_steps=recycling_steps,
             sampling_steps=sampling_steps
         )
+        if sampling_steps_affinity is not None:
+            request.sampling_steps_affinity = sampling_steps_affinity
+        if diffusion_samples_affinity is not None:
+            request.diffusion_samples_affinity = diffusion_samples_affinity
+        if affinity_mw_correction is not None:
+            request.affinity_mw_correction = affinity_mw_correction
         
         return await self.predict(request, **kwargs)
 
@@ -681,7 +743,7 @@ class Boltz2Client:
                     # Update the corresponding polymer with MSA
                     polymer_idx = sum(1 for s in config.sequences[:i] if s.protein)
                     if polymer_idx < len(request.polymers):
-                        request.polymers[polymer_idx].msa = [msa_record]
+                        request.polymers[polymer_idx].msa = {"default": {format_type: msa_record}}
                 else:
                     self.console.print(f"⚠️ MSA file not found: {msa_path}", style="yellow")
         
@@ -720,6 +782,324 @@ class Boltz2Client:
             yaml_path,
             **kwargs
         )
+    
+    def configure_msa_search(
+        self,
+        msa_endpoint_url: str,
+        api_key: Optional[str] = None,
+        timeout: int = 300,
+        max_retries: int = 3
+    ) -> None:
+        """
+        Configure MSA Search NIM integration.
+        
+        Args:
+            msa_endpoint_url: MSA Search NIM endpoint URL
+                - NVIDIA hosted: "https://health.api.nvidia.com/v1/biology/nvidia/msa-search"
+                - Local deployment: "http://localhost:8001"
+            api_key: API key for NVIDIA-hosted endpoints
+            timeout: Request timeout in seconds
+            max_retries: Maximum retry attempts
+        """
+        self._msa_search_client = MSASearchClient(
+            endpoint_url=msa_endpoint_url,
+            api_key=api_key or self.api_key,
+            timeout=timeout,
+            max_retries=max_retries
+        )
+        self._msa_search_integration = MSASearchIntegration(self._msa_search_client)
+        
+        self.console.print(f"✅ MSA Search configured: {msa_endpoint_url}", style="green")
+    
+    async def search_msa(
+        self,
+        sequence: str,
+        databases: Optional[List[str]] = None,
+        e_value: float = 0.0001,
+        max_msa_sequences: int = 500,
+        output_format: Optional[str] = None,
+        save_path: Optional[Union[str, Path]] = None,
+        **kwargs
+    ) -> Union[MSASearchResponse, Path]:
+        """
+        Search for MSA using GPU-accelerated MSA Search NIM.
+        
+        Args:
+            sequence: Protein sequence to search
+            databases: List of databases to search (default: ["all"])
+            e_value: E-value threshold for hits
+            max_msa_sequences: Maximum sequences in MSA
+            output_format: Output format if saving ("a3m", "fasta", "sto")
+            save_path: Path to save MSA file
+            **kwargs: Additional search parameters
+            
+        Returns:
+            MSASearchResponse if not saving, Path to saved file if save_path provided
+        """
+        if not self._msa_search_client:
+            raise Boltz2ClientError(
+                "MSA Search not configured. Call configure_msa_search() first."
+            )
+        
+        if save_path and output_format:
+            # Search and save
+            return await self._msa_search_integration.search_and_save(
+                sequence=sequence,
+                output_path=save_path,
+                output_format=output_format,
+                databases=databases,
+                e_value=e_value,
+                max_msa_sequences=max_msa_sequences,
+                **kwargs
+            )
+        else:
+            # Just search
+            return await self._msa_search_client.search(
+                sequence=sequence,
+                databases=databases,
+                e_value=e_value,
+                max_msa_sequences=max_msa_sequences,
+                **kwargs
+            )
+    
+    async def predict_with_msa_search(
+        self,
+        sequence: str,
+        polymer_id: str = "A",
+        databases: Optional[List[str]] = None,
+        e_value: float = 0.0001,
+        max_msa_sequences: int = 500,
+        recycling_steps: int = 3,
+        sampling_steps: int = 50,
+        diffusion_samples: int = 1,
+        step_scale: float = 1.638,
+        **kwargs
+    ) -> PredictionResponse:
+        """
+        Perform MSA search and use results for structure prediction in one step.
+        
+        Args:
+            sequence: Protein sequence
+            polymer_id: ID for the polymer (default: "A")
+            databases: Databases to search for MSA
+            e_value: E-value threshold for MSA
+            max_msa_sequences: Maximum sequences in MSA
+            recycling_steps: Number of recycling steps (1-6)
+            sampling_steps: Number of sampling steps (10-1000)
+            diffusion_samples: Number of diffusion samples (1-5)
+            step_scale: Step scale factor (0.5-5.0)
+            **kwargs: Additional parameters
+            
+        Returns:
+            PredictionResponse with structure
+        """
+        if not self._msa_search_client:
+            raise Boltz2ClientError(
+                "MSA Search not configured. Call configure_msa_search() first."
+            )
+        
+        # Perform MSA search
+        self.console.print(f"🔍 Searching MSA for sequence ({len(sequence)} residues)...", style="blue")
+        
+        msa_data = await self._msa_search_integration.search_and_prepare_for_boltz(
+            sequence=sequence,
+            polymer_id=polymer_id,
+            databases=databases,
+            e_value=e_value,
+            max_msa_sequences=max_msa_sequences,
+            **kwargs
+        )
+        
+        # Count sequences in alignment
+        alignment_text = msa_data['msa_search']['a3m'].alignment
+        seq_count = alignment_text.count('\n>')
+        self.console.print(f"✅ MSA search completed with {seq_count} sequences", style="green")
+        
+        # Create polymer with MSA
+        polymer = Polymer(
+            id=polymer_id,
+            molecule_type="protein",
+            sequence=sequence,
+            msa=msa_data
+        )
+        
+        # Create request
+        request = PredictionRequest(
+            polymers=[polymer],
+            recycling_steps=recycling_steps,
+            sampling_steps=sampling_steps,
+            diffusion_samples=diffusion_samples,
+            step_scale=step_scale
+        )
+        
+        # Predict structure
+        return await self.predict(request, **kwargs)
+    
+    async def batch_msa_search(
+        self,
+        sequences: Dict[str, str],
+        output_dir: Union[str, Path],
+        output_format: str = "a3m",
+        databases: Optional[List[str]] = None,
+        e_value: float = 0.0001,
+        max_msa_sequences: int = 500,
+        **kwargs
+    ) -> Dict[str, Path]:
+        """
+        Perform batch MSA search for multiple sequences.
+        
+        Args:
+            sequences: Dict mapping sequence IDs to sequences
+            output_dir: Directory to save MSA files
+            output_format: Output format ("a3m", "fasta", "sto")
+            databases: Databases to search
+            e_value: E-value threshold
+            max_msa_sequences: Maximum sequences per MSA
+            **kwargs: Additional search parameters
+            
+        Returns:
+            Dict mapping sequence IDs to output file paths
+        """
+        if not self._msa_search_client:
+            raise Boltz2ClientError(
+                "MSA Search not configured. Call configure_msa_search() first."
+            )
+        
+        return await self._msa_search_integration.batch_search(
+            sequences=sequences,
+            output_dir=output_dir,
+            output_format=output_format,
+            databases=databases,
+            e_value=e_value,
+            max_msa_sequences=max_msa_sequences,
+            **kwargs
+        )
+    
+    async def predict_ligand_with_msa_search(
+        self,
+        protein_sequence: str,
+        ligand_smiles: Optional[str] = None,
+        ligand_ccd: Optional[str] = None,
+        protein_id: str = "A",
+        ligand_id: str = "LIG",
+        databases: Optional[List[str]] = None,
+        e_value: float = 0.0001,
+        max_msa_sequences: int = 500,
+        pocket_residues: Optional[List[int]] = None,
+        recycling_steps: int = 3,
+        sampling_steps: int = 50,
+        predict_affinity: bool = False,
+        sampling_steps_affinity: Optional[int] = None,
+        diffusion_samples_affinity: Optional[int] = None,
+        affinity_mw_correction: Optional[bool] = None,
+        **kwargs
+    ) -> PredictionResponse:
+        """
+        Perform MSA search and predict protein-ligand complex with optional affinity.
+        
+        This method combines MSA search with protein-ligand complex prediction,
+        including optional affinity prediction, in a single streamlined workflow.
+        
+        Args:
+            protein_sequence: Protein sequence
+            ligand_smiles: SMILES string for ligand (mutually exclusive with ligand_ccd)
+            ligand_ccd: CCD code for ligand (mutually exclusive with ligand_smiles)
+            protein_id: Protein polymer identifier
+            ligand_id: Ligand identifier
+            databases: Databases to search for MSA (default: ["all"])
+            e_value: E-value threshold for MSA search
+            max_msa_sequences: Maximum sequences in MSA
+            pocket_residues: List of residue indices defining binding pocket
+            recycling_steps: Number of recycling steps (1-6)
+            sampling_steps: Number of sampling steps (10-1000)
+            predict_affinity: Enable affinity prediction for this ligand
+            sampling_steps_affinity: Sampling steps for affinity prediction
+            diffusion_samples_affinity: Diffusion samples for affinity prediction
+            affinity_mw_correction: Apply molecular weight correction to affinity
+            **kwargs: Additional parameters
+            
+        Returns:
+            PredictionResponse with structure and optionally affinity predictions
+            
+        Example:
+            >>> result = await client.predict_ligand_with_msa_search(
+            ...     protein_sequence="MKTVRQERLKS...",
+            ...     ligand_smiles="CC(=O)Oc1ccccc1C(=O)O",
+            ...     predict_affinity=True,
+            ...     sampling_steps_affinity=300
+            ... )
+            >>> print(f"pIC50: {result.affinities['LIG'].affinity_pic50[0]:.3f}")
+        """
+        if not self._msa_search_client:
+            raise Boltz2ClientError(
+                "MSA Search not configured. Call configure_msa_search() first."
+            )
+        
+        if not ligand_smiles and not ligand_ccd:
+            raise Boltz2ValidationError("Must provide either ligand_smiles or ligand_ccd")
+        
+        # Perform MSA search
+        self.console.print(f"🔍 Searching MSA for protein ({len(protein_sequence)} residues)...", style="blue")
+        
+        msa_data = await self._msa_search_integration.search_and_prepare_for_boltz(
+            sequence=protein_sequence,
+            polymer_id=protein_id,
+            databases=databases,
+            e_value=e_value,
+            max_msa_sequences=max_msa_sequences,
+            **kwargs
+        )
+        
+        # Count sequences in alignment
+        alignment_text = list(msa_data.values())[0]['a3m'].alignment
+        seq_count = alignment_text.count('\n>')
+        self.console.print(f"✅ MSA search completed with {seq_count} sequences", style="green")
+        
+        # Use the predict_protein_ligand_complex method with MSA
+        return await self.predict_protein_ligand_complex(
+            protein_sequence=protein_sequence,
+            ligand_smiles=ligand_smiles,
+            ligand_ccd=ligand_ccd,
+            protein_id=protein_id,
+            ligand_id=ligand_id,
+            pocket_residues=pocket_residues,
+            recycling_steps=recycling_steps,
+            sampling_steps=sampling_steps,
+            predict_affinity=predict_affinity,
+            sampling_steps_affinity=sampling_steps_affinity,
+            diffusion_samples_affinity=diffusion_samples_affinity,
+            affinity_mw_correction=affinity_mw_correction,
+            msa=msa_data,  # Pass the MSA data
+            **kwargs
+        )
+    
+    async def get_msa_databases(self) -> Dict[str, Any]:
+        """
+        Get MSA database configurations.
+        
+        Returns:
+            Dictionary of database configurations
+        """
+        if not self._msa_search_client:
+            raise Boltz2ClientError(
+                "MSA Search not configured. Call configure_msa_search() first."
+            )
+        
+        return await self._msa_search_client.get_databases()
+    
+    async def get_msa_databases_status(self) -> Dict[str, Any]:
+        """
+        Get MSA databases status.
+        
+        Returns:
+            Dictionary of database status information
+        """
+        if not self._msa_search_client:
+            raise Boltz2ClientError(
+                "MSA Search not configured. Call configure_msa_search() first."
+            )
+        
+        return await self._msa_search_client.get_databases_status()
 
     def create_yaml_config(
         self,
@@ -845,6 +1225,18 @@ class Boltz2Client:
         metadata_file.write_text(json.dumps(metadata, indent=2))
         saved_files.append(metadata_file)
         
+        # Save affinities if present
+        if getattr(response, "affinities", None):
+            affinities_file = output_dir / "affinities.json"
+            try:
+                affinities_file.write_text(json.dumps(response.affinities, default=lambda o: o.dict() if hasattr(o, 'dict') else o, indent=2))
+                saved_files.append(affinities_file)
+                if progress_callback:
+                    progress_callback(f"Saved affinities to {affinities_file}")
+            except Exception:
+                # Best-effort write; do not fail the whole save
+                pass
+        
         if progress_callback:
             progress_callback(f"Saved metadata to {metadata_file}")
         
@@ -923,6 +1315,137 @@ class Boltz2SyncClient:
     def predict_with_advanced_parameters(self, **kwargs) -> PredictionResponse:
         """Make prediction with full parameter control."""
         return asyncio.run(self._async_client.predict_with_advanced_parameters(**kwargs))
+    
+    def configure_msa_search(
+        self,
+        msa_endpoint_url: str,
+        api_key: Optional[str] = None,
+        timeout: int = 300,
+        max_retries: int = 3
+    ) -> None:
+        """Configure MSA Search NIM integration."""
+        return self._async_client.configure_msa_search(
+            msa_endpoint_url=msa_endpoint_url,
+            api_key=api_key,
+            timeout=timeout,
+            max_retries=max_retries
+        )
+    
+    def search_msa(
+        self,
+        sequence: str,
+        databases: Optional[List[str]] = None,
+        e_value: float = 0.0001,
+        max_msa_sequences: int = 500,
+        output_format: Optional[str] = None,
+        save_path: Optional[Union[str, Path]] = None,
+        **kwargs
+    ) -> Union[MSASearchResponse, Path]:
+        """Search for MSA using GPU-accelerated MSA Search NIM."""
+        return asyncio.run(self._async_client.search_msa(
+            sequence=sequence,
+            databases=databases,
+            e_value=e_value,
+            max_msa_sequences=max_msa_sequences,
+            output_format=output_format,
+            save_path=save_path,
+            **kwargs
+        ))
+    
+    def predict_with_msa_search(
+        self,
+        sequence: str,
+        polymer_id: str = "A",
+        databases: Optional[List[str]] = None,
+        e_value: float = 0.0001,
+        max_msa_sequences: int = 500,
+        recycling_steps: int = 3,
+        sampling_steps: int = 50,
+        diffusion_samples: int = 1,
+        step_scale: float = 1.638,
+        **kwargs
+    ) -> PredictionResponse:
+        """Perform MSA search and use results for structure prediction."""
+        return asyncio.run(self._async_client.predict_with_msa_search(
+            sequence=sequence,
+            polymer_id=polymer_id,
+            databases=databases,
+            e_value=e_value,
+            max_msa_sequences=max_msa_sequences,
+            recycling_steps=recycling_steps,
+            sampling_steps=sampling_steps,
+            diffusion_samples=diffusion_samples,
+            step_scale=step_scale,
+            **kwargs
+        ))
+    
+    def batch_msa_search(
+        self,
+        sequences: Dict[str, str],
+        output_dir: Union[str, Path],
+        output_format: str = "a3m",
+        databases: Optional[List[str]] = None,
+        e_value: float = 0.0001,
+        max_msa_sequences: int = 500,
+        **kwargs
+    ) -> Dict[str, Path]:
+        """Perform batch MSA search for multiple sequences."""
+        return asyncio.run(self._async_client.batch_msa_search(
+            sequences=sequences,
+            output_dir=output_dir,
+            output_format=output_format,
+            databases=databases,
+            e_value=e_value,
+            max_msa_sequences=max_msa_sequences,
+            **kwargs
+        ))
+    
+    def predict_ligand_with_msa_search(
+        self,
+        protein_sequence: str,
+        ligand_smiles: Optional[str] = None,
+        ligand_ccd: Optional[str] = None,
+        protein_id: str = "A",
+        ligand_id: str = "LIG",
+        databases: Optional[List[str]] = None,
+        e_value: float = 0.0001,
+        max_msa_sequences: int = 500,
+        pocket_residues: Optional[List[int]] = None,
+        recycling_steps: int = 3,
+        sampling_steps: int = 50,
+        predict_affinity: bool = False,
+        sampling_steps_affinity: Optional[int] = None,
+        diffusion_samples_affinity: Optional[int] = None,
+        affinity_mw_correction: Optional[bool] = None,
+        **kwargs
+    ) -> PredictionResponse:
+        """Perform MSA search and predict protein-ligand complex with optional affinity."""
+        return asyncio.run(self._async_client.predict_ligand_with_msa_search(
+            protein_sequence=protein_sequence,
+            ligand_smiles=ligand_smiles,
+            ligand_ccd=ligand_ccd,
+            protein_id=protein_id,
+            ligand_id=ligand_id,
+            databases=databases,
+            e_value=e_value,
+            max_msa_sequences=max_msa_sequences,
+            pocket_residues=pocket_residues,
+            recycling_steps=recycling_steps,
+            sampling_steps=sampling_steps,
+            predict_affinity=predict_affinity,
+            sampling_steps_affinity=sampling_steps_affinity,
+            diffusion_samples_affinity=diffusion_samples_affinity,
+            affinity_mw_correction=affinity_mw_correction,
+            **kwargs
+        ))
+    
+    def get_msa_databases(self) -> Dict[str, Any]:
+        """Get MSA database configurations."""
+        return asyncio.run(self._async_client.get_msa_databases())
+    
+    def get_msa_databases_status(self) -> Dict[str, Any]:
+        """Get MSA databases status."""
+        return asyncio.run(self._async_client.get_msa_databases_status())
 
 
 # Convenience functions for quick predictions

@@ -21,7 +21,7 @@ from typing import List, Optional, Tuple, Dict, Any
 import click
 from rich.console import Console
 from rich.table import Table
-from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn, BarColumn
 from rich.panel import Panel
 from rich.text import Text
 import yaml as pyyaml
@@ -58,7 +58,7 @@ def print_warning(message: str):
 
 
 @click.group()
-@click.option('--base-url', default='http://localhost:8000', help='Service base URL')
+@click.option('--base-url', default='http://localhost:8000', help='Service base URL (can be comma-separated for multiple endpoints)')
 @click.option('--api-key', help='API key for NVIDIA hosted endpoints (or set NVIDIA_API_KEY env var)')
 @click.option('--endpoint-type', 
               type=click.Choice(['local', 'nvidia_hosted']), 
@@ -66,10 +66,16 @@ def print_warning(message: str):
               help='Type of endpoint: local or nvidia_hosted')
 @click.option('--timeout', default=300.0, help='Request timeout in seconds')
 @click.option('--poll-seconds', default=10, help='Polling interval for NVIDIA hosted endpoints')
+@click.option('--multi-endpoint', is_flag=True, help='Enable multi-endpoint load balancing')
+@click.option('--load-balance-strategy', 
+              type=click.Choice(['round_robin', 'least_loaded', 'random']), 
+              default='least_loaded',
+              help='Load balancing strategy for multi-endpoint')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose output')
 @click.pass_context
 def cli(ctx, base_url: str, api_key: Optional[str], endpoint_type: str, 
-        timeout: float, poll_seconds: int, verbose: bool):
+        timeout: float, poll_seconds: int, multi_endpoint: bool, 
+        load_balance_strategy: str, verbose: bool):
     """
     Boltz-2 Python Client CLI
     
@@ -79,6 +85,12 @@ def cli(ctx, base_url: str, api_key: Optional[str], endpoint_type: str,
     
     # Local endpoint
     boltz2 --base-url http://localhost:8000 protein "MKTVRQERLK..."
+    
+    # Multi-endpoint for parallel processing
+    boltz2 --multi-endpoint --base-url "http://localhost:8000,http://localhost:8001,http://localhost:8002,http://localhost:8003" screen target.fasta compounds.csv
+    
+    # Multi-endpoint with custom strategy
+    boltz2 --multi-endpoint --base-url "http://localhost:8000,http://localhost:8001" --load-balance-strategy round_robin protein "MKTVRQERLK..."
     
     # NVIDIA hosted endpoint  
     boltz2 --base-url https://health.api.nvidia.com --endpoint-type nvidia_hosted --api-key YOUR_KEY protein "MKTVRQERLK..."
@@ -93,27 +105,61 @@ def cli(ctx, base_url: str, api_key: Optional[str], endpoint_type: str,
     ctx.obj['endpoint_type'] = endpoint_type
     ctx.obj['timeout'] = timeout
     ctx.obj['poll_seconds'] = poll_seconds
+    ctx.obj['multi_endpoint'] = multi_endpoint
+    ctx.obj['load_balance_strategy'] = load_balance_strategy
     ctx.obj['verbose'] = verbose
     
     if verbose:
-        print_info(f"Using {endpoint_type} endpoint: {base_url}")
-        if endpoint_type == 'nvidia_hosted':
-            if api_key:
-                print_info("API key provided via command line")
-            else:
-                print_info("API key will be read from NVIDIA_API_KEY environment variable")
+        if multi_endpoint:
+            endpoints = [url.strip() for url in base_url.split(',')]
+            print_info(f"Using multi-endpoint mode with {len(endpoints)} endpoints")
+            print_info(f"Load balance strategy: {load_balance_strategy}")
+            for ep in endpoints:
+                print_info(f"  - {ep}")
+        else:
+            print_info(f"Using {endpoint_type} endpoint: {base_url}")
+            if endpoint_type == 'nvidia_hosted':
+                if api_key:
+                    print_info("API key provided via command line")
+                else:
+                    print_info("API key will be read from NVIDIA_API_KEY environment variable")
 
 
-def create_client(ctx) -> Boltz2Client:
-    """Create a Boltz2Client from context."""
-    return Boltz2Client(
-        base_url=ctx.obj['base_url'],
-        api_key=ctx.obj['api_key'],
-        endpoint_type=ctx.obj['endpoint_type'],
-        timeout=ctx.obj['timeout'],
-        poll_seconds=ctx.obj['poll_seconds'],
-        console=console
-    )
+def create_client(ctx):
+    """Create a Boltz2Client or MultiEndpointClient from context."""
+    from .multi_endpoint_client import MultiEndpointClient, LoadBalanceStrategy
+    
+    if ctx.obj['multi_endpoint']:
+        # Parse multiple endpoints from comma-separated list
+        endpoints = [url.strip() for url in ctx.obj['base_url'].split(',')]
+        
+        # Map strategy string to enum
+        strategy_map = {
+            'round_robin': LoadBalanceStrategy.ROUND_ROBIN,
+            'least_loaded': LoadBalanceStrategy.LEAST_LOADED,
+            'random': LoadBalanceStrategy.RANDOM
+        }
+        strategy = strategy_map[ctx.obj['load_balance_strategy']]
+        
+        if ctx.obj['verbose']:
+            print_info(f"Using multi-endpoint with {len(endpoints)} endpoints")
+            print_info(f"Load balance strategy: {strategy.value}")
+        
+        return MultiEndpointClient(
+            endpoints=endpoints,
+            strategy=strategy,
+            timeout=ctx.obj['timeout']
+        )
+    else:
+        # Single endpoint
+        return Boltz2Client(
+            base_url=ctx.obj['base_url'],
+            api_key=ctx.obj['api_key'],
+            endpoint_type=ctx.obj['endpoint_type'],
+            timeout=ctx.obj['timeout'],
+            poll_seconds=ctx.obj['poll_seconds'],
+            console=console
+        )
 
 
 @cli.command()
@@ -316,6 +362,8 @@ def protein(ctx, sequence: str, polymer_id: str, recycling_steps: int, sampling_
 @click.option('--sampling-steps-affinity', default=200, type=click.IntRange(10, 1000), help='Sampling steps for affinity prediction (default: 200)')
 @click.option('--diffusion-samples-affinity', default=5, type=click.IntRange(1, 10), help='Diffusion samples for affinity prediction (default: 5)')
 @click.option('--affinity-mw-correction', is_flag=True, help='Apply molecular weight correction to affinity prediction')
+@click.option('--msa-file', multiple=True, type=(str, click.Choice(['sto', 'a3m', 'csv', 'fasta'])),
+              help='MSA file and format (can be specified multiple times)')
 @click.option('--output-dir', type=click.Path(), default='.', help='Directory to save output files (structure_0.cif, prediction_metadata.json). Default: current directory')
 @click.option('--no-save', is_flag=True, help='Do not save structure files')
 @click.pass_context
@@ -323,15 +371,17 @@ def ligand(ctx, protein_sequence: str, smiles: Optional[str], ccd: Optional[str]
           protein_id: str, ligand_id: str, pocket_residues: Optional[str],
           recycling_steps: int, sampling_steps: int, predict_affinity: bool,
           sampling_steps_affinity: int, diffusion_samples_affinity: int, 
-          affinity_mw_correction: bool, output_dir: str, no_save: bool):
+          affinity_mw_correction: bool, msa_file: List[Tuple[str, str]], 
+          output_dir: str, no_save: bool):
     """
-    Predict protein-ligand complex structure.
+    Predict protein-ligand complex structure with optional MSA guidance.
     
     PROTEIN_SEQUENCE: Protein amino acid sequence
     
     Example:
         boltz2 ligand "PROTEIN_SEQ" --smiles "CC(=O)OC1=CC=CC=C1C(=O)O"
         boltz2 ligand "PROTEIN_SEQ" --ccd ASP --pocket-residues "10,15,20,25"
+        boltz2 ligand "PROTEIN_SEQ" --smiles "CC(=O)O" --msa-file alignment.a3m a3m --predict-affinity
     """
     if not smiles and not ccd:
         print_error("Must provide either --smiles or --ccd")
@@ -374,31 +424,36 @@ def ligand(ctx, protein_sequence: str, smiles: Optional[str], ccd: Optional[str]
                 def progress_callback(message: str):
                     progress.update(task, description=message)
                 
-                # Create request with affinity parameters
-                polymer = Polymer(
-                    id=protein_id,
-                    molecule_type="protein",
-                    sequence=protein_sequence
-                )
+                # Prepare MSA files
+                msa_files = []
+                for file_path, format_type in msa_file:
+                    if not Path(file_path).exists():
+                        print_error(f"MSA file not found: {file_path}")
+                        raise click.Abort()
+                    msa_files.append((file_path, format_type))
                 
-                ligand_obj = Ligand(
-                    id=ligand_id,
-                    smiles=smiles,
-                    ccd=ccd,
-                    predict_affinity=predict_affinity
-                )
+                if msa_files:
+                    print_info(f"Using {len(msa_files)} MSA file(s)")
                 
-                request = PredictionRequest(
-                    polymers=[polymer],
-                    ligands=[ligand_obj],
+                # Use the convenience method that handles MSA
+                result = await client.predict_protein_ligand_complex(
+                    protein_sequence=protein_sequence,
+                    ligand_smiles=smiles,
+                    ligand_ccd=ccd,
+                    protein_id=protein_id,
+                    ligand_id=ligand_id,
+                    pocket_residues=pocket_res_list if pocket_residues else None,
                     recycling_steps=recycling_steps,
                     sampling_steps=sampling_steps,
-                    sampling_steps_affinity=sampling_steps_affinity if predict_affinity else None,
-                    diffusion_samples_affinity=diffusion_samples_affinity if predict_affinity else None,
-                    affinity_mw_correction=affinity_mw_correction if predict_affinity else None
+                    predict_affinity=predict_affinity,
+                    sampling_steps_affinity=sampling_steps_affinity,
+                    diffusion_samples_affinity=diffusion_samples_affinity,
+                    affinity_mw_correction=affinity_mw_correction,
+                    msa_files=msa_files if msa_files else None,
+                    save_structures=not no_save,
+                    output_dir=Path(output_dir),
+                    progress_callback=progress_callback
                 )
-                
-                result = await client.predict(request)
                 
                 progress.update(task, description="Prediction completed!")
             
@@ -951,7 +1006,7 @@ def yaml_config(ctx, yaml_file: str, msa_dir: Optional[str], recycling_steps: in
                             # Update the corresponding polymer with MSA
                             polymer_idx = sum(1 for s in config.sequences[:i] if s.protein)
                             if polymer_idx < len(request.polymers):
-                                request.polymers[polymer_idx].msa = [msa_record]
+                                request.polymers[polymer_idx].msa = {"default": {format_type: msa_record}}
                         else:
                             print_warning(f"MSA file not found: {msa_path}")
                 
@@ -987,6 +1042,364 @@ def yaml_config(ctx, yaml_file: str, msa_dir: Optional[str], recycling_steps: in
     asyncio.run(run_yaml_prediction())
 
 
+@cli.command(name='msa-search')
+@click.argument('sequence')
+@click.option('--endpoint', default='http://your-msa-nim:8000', 
+              help='MSA Search NIM endpoint URL')
+@click.option('--databases', '-d', multiple=True, default=['all'],
+              help='Databases to search (default: all)')
+@click.option('--max-sequences', default=500, type=int,
+              help='Maximum sequences to return (default: 500)')
+@click.option('--e-value', default=0.0001, type=float,
+              help='E-value threshold (default: 0.0001)')
+@click.option('--output-format', '-f', 
+              type=click.Choice(['a3m', 'fasta', 'sto']), 
+              default='a3m',
+              help='Output format (default: a3m)')
+@click.option('--output', '-o', type=click.Path(), required=True,
+              help='Output file path')
+@click.pass_context
+def msa_search_command(ctx, sequence: str, endpoint: str, databases: List[str],
+                       max_sequences: int, e_value: float, 
+                       output_format: str, output: str):
+    """
+    Search for MSA using GPU-accelerated MSA Search NIM.
+    
+    Examples:
+    
+    # Basic MSA search
+    boltz2 msa-search "MKTVRQERLKS..." -o output.a3m
+    
+    # Search specific databases with custom parameters
+    boltz2 msa-search "SEQUENCE" -d uniref90 -d pdb70 --max-sequences 1000 -o output.a3m
+    
+    # Export in different format
+    boltz2 msa-search "SEQUENCE" -f fasta -o output.fasta
+    """
+    async def run_msa_search():
+        try:
+            # Get client configuration
+            config = ctx.obj
+            client = Boltz2Client(
+                base_url=config['base_url'],
+                api_key=config.get('api_key'),
+                endpoint_type=config['endpoint_type']
+            )
+            
+            # Configure MSA Search
+            print_info(f"Configuring MSA Search NIM: {endpoint}")
+            client.configure_msa_search(
+                msa_endpoint_url=endpoint,
+                api_key=config.get('api_key')
+            )
+            
+            # Show search parameters
+            print_info("Search Parameters:")
+            print(f"  Databases: {', '.join(databases)}")
+            print(f"  Max sequences: {max_sequences}")
+            print(f"  E-value: {e_value}")
+            print(f"  Output format: {output_format}")
+            
+            # Perform search
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TimeElapsedColumn()
+            ) as progress:
+                task = progress.add_task("Searching MSA...", total=None)
+                
+                result_path = await client.search_msa(
+                    sequence=sequence,
+                    databases=list(databases),
+                    max_msa_sequences=max_sequences,
+                    e_value=e_value,
+                    output_format=output_format,
+                    save_path=output
+                )
+                
+                progress.update(task, completed=100)
+            
+            # Show results
+            file_size = Path(result_path).stat().st_size
+            seq_count = Path(result_path).read_text().count('\n>')
+            
+            print_success(f"MSA search completed!")
+            print(f"  Sequences found: {seq_count}")
+            print(f"  File size: {file_size:,} bytes")
+            print(f"  Saved to: {result_path}")
+            
+        except Exception as e:
+            print_error(f"MSA search failed: {e}")
+    
+    asyncio.run(run_msa_search())
+
+
+@cli.command(name='msa-predict')
+@click.argument('sequence')
+@click.option('--endpoint', default='http://your-msa-nim:8000',
+              help='MSA Search NIM endpoint URL')
+@click.option('--databases', '-d', multiple=True, default=['all'],
+              help='Databases to search (default: all)')
+@click.option('--max-sequences', default=500, type=int,
+              help='Maximum sequences for MSA (default: 500)')
+@click.option('--e-value', default=0.0001, type=float,
+              help='E-value threshold (default: 0.0001)')
+@click.option('--recycling-steps', default=3, type=click.IntRange(1, 6),
+              help='Number of recycling steps (default: 3)')
+@click.option('--sampling-steps', default=50, type=click.IntRange(10, 1000),
+              help='Number of sampling steps (default: 50)')
+@click.option('--output-dir', type=click.Path(), default='.',
+              help='Directory to save output files')
+@click.option('--no-save-msa', is_flag=True,
+              help="Don't save the MSA file separately")
+@click.pass_context
+def msa_predict_command(ctx, sequence: str, endpoint: str, databases: List[str],
+                        max_sequences: int, e_value: float,
+                        recycling_steps: int, sampling_steps: int,
+                        output_dir: str, no_save_msa: bool):
+    """
+    Perform MSA search and structure prediction in one step.
+    
+    This command combines MSA search with structure prediction for enhanced results.
+    
+    Examples:
+    
+    # Basic MSA-guided prediction
+    boltz2 msa-predict "MKTVRQERLKS..."
+    
+    # Custom parameters
+    boltz2 msa-predict "SEQUENCE" --max-sequences 1000 --recycling-steps 5
+    
+    # Save to specific directory
+    boltz2 msa-predict "SEQUENCE" --output-dir results/
+    """
+    async def run_msa_predict():
+        try:
+            # Get client configuration
+            config = ctx.obj
+            client = Boltz2Client(
+                base_url=config['base_url'],
+                api_key=config.get('api_key'),
+                endpoint_type=config['endpoint_type']
+            )
+            
+            # Configure MSA Search
+            print_info(f"Configuring MSA Search NIM: {endpoint}")
+            client.configure_msa_search(
+                msa_endpoint_url=endpoint,
+                api_key=config.get('api_key')
+            )
+            
+            # Show parameters
+            print_info("MSA Search Parameters:")
+            print(f"  Databases: {', '.join(databases)}")
+            print(f"  Max sequences: {max_sequences}")
+            print(f"  E-value: {e_value}")
+            
+            print_info("Prediction Parameters:")
+            print(f"  Recycling steps: {recycling_steps}")
+            print(f"  Sampling steps: {sampling_steps}")
+            
+            # Perform MSA search + prediction
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TimeElapsedColumn()
+            ) as progress:
+                task = progress.add_task("MSA search + structure prediction...", total=None)
+                
+                result = await client.predict_with_msa_search(
+                    sequence=sequence,
+                    databases=list(databases),
+                    max_msa_sequences=max_sequences,
+                    e_value=e_value,
+                    recycling_steps=recycling_steps,
+                    sampling_steps=sampling_steps
+                )
+                
+                progress.update(task, completed=100)
+            
+            # Save results
+            output_path = Path(output_dir)
+            output_path.mkdir(exist_ok=True)
+            
+            structure_file = output_path / "structure_with_msa.cif"
+            structure_file.write_text(result.structures[0].structure)
+            
+            confidence = result.confidence_scores[0] if result.confidence_scores else 0.0
+            
+            print_success("Prediction completed!")
+            print(f"  Confidence score: {confidence:.3f}")
+            print(f"  Structure saved to: {structure_file}")
+            
+            # Optionally save MSA separately
+            if not no_save_msa:
+                msa_file = output_path / "msa_alignment.a3m"
+                await client.search_msa(
+                    sequence=sequence,
+                    databases=list(databases),
+                    max_msa_sequences=max_sequences,
+                    e_value=e_value,
+                    output_format='a3m',
+                    save_path=msa_file
+                )
+                print(f"  MSA saved to: {msa_file}")
+            
+        except Exception as e:
+            print_error(f"MSA prediction failed: {e}")
+    
+    asyncio.run(run_msa_predict())
+
+
+@cli.command(name='msa-ligand')
+@click.argument('protein_sequence')
+@click.option('--smiles', help='Ligand SMILES string')
+@click.option('--ccd', help='Ligand CCD code (alternative to SMILES)')
+@click.option('--endpoint', default='http://your-msa-nim:8000',
+              help='MSA Search NIM endpoint URL')
+@click.option('--databases', '-d', multiple=True, default=['all'],
+              help='Databases to search (default: all)')
+@click.option('--max-sequences', default=500, type=int,
+              help='Maximum sequences for MSA (default: 500)')
+@click.option('--e-value', default=0.0001, type=float,
+              help='E-value threshold (default: 0.0001)')
+@click.option('--predict-affinity', is_flag=True,
+              help='Enable affinity prediction')
+@click.option('--sampling-steps-affinity', default=200, type=int,
+              help='Sampling steps for affinity (default: 200)')
+@click.option('--diffusion-samples-affinity', default=5, type=int,
+              help='Diffusion samples for affinity (default: 5)')
+@click.option('--affinity-mw-correction', is_flag=True,
+              help='Apply MW correction to affinity')
+@click.option('--recycling-steps', default=3, type=click.IntRange(1, 6),
+              help='Number of recycling steps (default: 3)')
+@click.option('--sampling-steps', default=50, type=click.IntRange(10, 1000),
+              help='Number of sampling steps (default: 50)')
+@click.option('--output-dir', type=click.Path(), default='.',
+              help='Directory to save output files')
+@click.pass_context
+def msa_ligand_command(ctx, protein_sequence: str, smiles: Optional[str], ccd: Optional[str],
+                       endpoint: str, databases: List[str], max_sequences: int, e_value: float,
+                       predict_affinity: bool, sampling_steps_affinity: int,
+                       diffusion_samples_affinity: int, affinity_mw_correction: bool,
+                       recycling_steps: int, sampling_steps: int, output_dir: str):
+    """
+    MSA search + protein-ligand prediction with optional affinity.
+    
+    Combines MSA search with ligand complex prediction for enhanced accuracy.
+    
+    Examples:
+    
+    # Basic MSA-guided ligand prediction
+    boltz2 msa-ligand "MKTVRQERLKS..." --smiles "CC(=O)O"
+    
+    # With affinity prediction
+    boltz2 msa-ligand "SEQUENCE" --smiles "CC(=O)O" --predict-affinity
+    
+    # Custom parameters
+    boltz2 msa-ligand "SEQUENCE" --ccd ATP --max-sequences 1000 \\
+        --predict-affinity --sampling-steps-affinity 300
+    """
+    if not smiles and not ccd:
+        print_error("Must provide either --smiles or --ccd")
+        raise click.Abort()
+    
+    if smiles and ccd:
+        print_error("Provide either --smiles or --ccd, not both")
+        raise click.Abort()
+    
+    async def run_msa_ligand():
+        try:
+            # Get client configuration
+            config = ctx.obj
+            client = Boltz2Client(
+                base_url=config['base_url'],
+                api_key=config.get('api_key'),
+                endpoint_type=config['endpoint_type']
+            )
+            
+            # Configure MSA Search
+            print_info(f"Configuring MSA Search NIM: {endpoint}")
+            client.configure_msa_search(
+                msa_endpoint_url=endpoint,
+                api_key=config.get('api_key')
+            )
+            
+            # Show parameters
+            print_info("MSA Search Parameters:")
+            print(f"  Databases: {', '.join(databases)}")
+            print(f"  Max sequences: {max_sequences}")
+            print(f"  E-value: {e_value}")
+            
+            print_info("Prediction Parameters:")
+            print(f"  Recycling steps: {recycling_steps}")
+            print(f"  Sampling steps: {sampling_steps}")
+            
+            if predict_affinity:
+                print_info("Affinity Parameters:")
+                print(f"  Sampling steps: {sampling_steps_affinity}")
+                print(f"  Diffusion samples: {diffusion_samples_affinity}")
+                print(f"  MW correction: {affinity_mw_correction}")
+            
+            # Perform MSA search + ligand prediction
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TimeElapsedColumn()
+            ) as progress:
+                task = progress.add_task("MSA search + ligand prediction...", total=None)
+                
+                result = await client.predict_ligand_with_msa_search(
+                    protein_sequence=protein_sequence,
+                    ligand_smiles=smiles,
+                    ligand_ccd=ccd,
+                    databases=list(databases),
+                    e_value=e_value,
+                    max_msa_sequences=max_sequences,
+                    recycling_steps=recycling_steps,
+                    sampling_steps=sampling_steps,
+                    predict_affinity=predict_affinity,
+                    sampling_steps_affinity=sampling_steps_affinity if predict_affinity else None,
+                    diffusion_samples_affinity=diffusion_samples_affinity if predict_affinity else None,
+                    affinity_mw_correction=affinity_mw_correction if predict_affinity else None,
+                    save_structures=True,
+                    output_dir=Path(output_dir)
+                )
+                
+                progress.update(task, completed=100)
+            
+            # Save results
+            output_path = Path(output_dir)
+            
+            print_success("Prediction completed!")
+            
+            if result.confidence_scores:
+                confidence = result.confidence_scores[0]
+                print(f"  Confidence score: {confidence:.3f}")
+            
+            if result.structures:
+                structure_file = output_path / "structure_0.cif"
+                print(f"  Structure saved to: {structure_file}")
+            
+            # Display affinity results if available
+            if predict_affinity and result.affinities:
+                ligand_id = "LIG"  # Default ligand ID
+                if ligand_id in result.affinities:
+                    aff = result.affinities[ligand_id]
+                    print_info("Affinity Predictions:")
+                    print(f"  pIC50: {aff.affinity_pic50[0]:.3f}")
+                    print(f"  IC50: {aff.affinity_ic50[0]:.3f} nM")
+                    print(f"  Binding probability: {aff.affinity_probability_binary[0]:.3f}")
+            
+        except Exception as e:
+            print_error(f"MSA-ligand prediction failed: {e}")
+    
+    asyncio.run(run_msa_ligand())
+
+
 @cli.command(name='screen')
 @click.argument('target_sequence', type=str)
 @click.argument('compounds_file', type=click.Path(exists=True))
@@ -1010,8 +1423,7 @@ def screen(ctx, target_sequence, compounds_file, target_name, output_dir, no_aff
         boltz2 screen "MKTVRQERLK..." compounds.csv -o results/
         boltz2 screen target.fasta library.json --pocket-residues "10,15,20,25"
     """
-    console = ctx.obj["console"]
-    client = ctx.obj["client"]
+    client = create_client(ctx)
     
     # Import here to avoid circular imports
     from .virtual_screening import VirtualScreening, CompoundLibrary

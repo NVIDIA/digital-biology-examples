@@ -5,14 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "boltz2-python-client"
 dynamic = ["version"]
-description = "Python client for Boltz-2 protein structure prediction API with covalent complex support"
+description = "Python client for Boltz-2 protein structure prediction API with covalent complex and multi-endpoint support"
 readme = "README.md"
 license = "MIT"
 authors = [
-    {name = "NVIDIA Corporation"}
+    {name = "NVIDIA Corporation", email = "bionemo-support@nvidia.com"}
 ]
 maintainers = [
-    {name = "NVIDIA Corporation"}
+    {name = "NVIDIA Corporation", email = "bionemo-support@nvidia.com"}
 ]
 keywords = ["protein", "structure", "prediction", "AI", "machine learning", "bioinformatics", "covalent", "complex", "boltz2"]
 classifiers = [
@@ -47,9 +47,10 @@ dependencies = [
 boltz2 = "boltz2_client.cli:cli"
 
 [project.urls]
-Homepage = "https://github.com/NVIDIA/bionemo-examples/tree/add-boltz2-python-client/examples/nims/boltz-2"
-Repository = "https://github.com/NVIDIA/bionemo-examples/tree/add-boltz2-python-client/examples/nims/boltz-2"
-
+Homepage = "https://github.com/NVIDIA/digital-biology-examples/tree/main/examples/nims/boltz-2"
+Repository = "https://github.com/NVIDIA/digital-biology-examples/tree/main/examples/nims/boltz-2"
+Documentation = "https://github.com/NVIDIA/digital-biology-examples/tree/main/examples/nims/boltz-2/README.md"
+"Bug Reports" = "https://github.com/NVIDIA/digital-biology-examples/issues"
 
 [tool.setuptools.dynamic]
 version = {attr = "boltz2_client.__version__"}

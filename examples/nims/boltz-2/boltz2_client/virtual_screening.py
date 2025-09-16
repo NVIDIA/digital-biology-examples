@@ -21,6 +21,7 @@ import pandas as pd
 from .client import Boltz2Client, Boltz2SyncClient
 from .models import Polymer, Ligand, PredictionRequest, PocketConstraint
 from .exceptions import Boltz2ValidationError
+from .multi_endpoint_client import MultiEndpointClient
 
 
 class CompoundLibrary:
@@ -215,18 +216,22 @@ class VirtualScreening:
     """High-level API for virtual screening campaigns."""
     
     def __init__(self, 
-                 client: Optional[Union[Boltz2Client, Boltz2SyncClient]] = None,
+                 client: Optional[Union[Boltz2Client, Boltz2SyncClient, MultiEndpointClient]] = None,
                  max_workers: int = 4):
         """
         Initialize virtual screening.
         
         Args:
             client: Boltz2 client instance (if None, creates default)
+                   Can be a single client or MultiEndpointClient for load balancing
             max_workers: Maximum parallel workers for screening
         """
         self.client = client or Boltz2SyncClient()
         self.max_workers = max_workers
-        self.is_async = isinstance(self.client, Boltz2Client)
+        self.is_async = isinstance(self.client, (Boltz2Client, MultiEndpointClient)) and (
+            not hasattr(self.client, 'is_async') or self.client.is_async
+        )
+        self.is_multi_endpoint = isinstance(self.client, MultiEndpointClient)
     
     def screen(self,
                target_sequence: str,
@@ -452,7 +457,10 @@ class VirtualScreening:
                 request.affinity_mw_correction = parameters["affinity_mw_correction"]
             
             # Run prediction
-            response = self.client.predict(request)
+            if self.is_multi_endpoint and not self.is_async:
+                response = self.client.predict_sync(request)
+            else:
+                response = self.client.predict(request)
             
             # Extract results
             result = {

@@ -84,6 +84,43 @@ This directory contains comprehensive examples demonstrating all the different v
 
 **Run:** `python examples/09_virtual_screening.py`
 
+### 10. **MSA Search Integration** (`10_msa_search_integration.py`)
+- GPU-accelerated MSA search with NVIDIA MSA Search NIM
+- Direct MSA search and export in multiple formats (A3M, FASTA, STO)
+- Automated MSA + structure prediction workflow
+- Comparison of predictions with and without MSA
+- Batch MSA search for multiple sequences
+
+**Run:** `python examples/10_msa_search_integration.py`
+
+### 11. **MSA Search for Large Proteins** (`11_msa_search_large_protein.py`)
+- MSA search for a ~500 residue protein (Human Serum Albumin)
+- Performance optimization for large proteins
+- Database selection strategies
+- Memory-efficient processing
+- Error handling and retry logic
+
+**Run:** `python examples/11_msa_search_large_protein.py`
+
+### 12. **MSA-Guided Affinity Prediction** (`12_msa_affinity_prediction.py`)
+- Combine MSA search with affinity prediction
+- Enhanced accuracy through evolutionary information
+- Protein-ligand binding affinity (pIC50) estimation
+- Complete workflow from MSA to affinity prediction
+- Best practices for MSA-guided drug discovery
+
+**Run:** `python examples/12_msa_affinity_prediction.py`
+
+### **Multi-Endpoint Virtual Screening** (`multi_endpoint_screening.py`)
+- Parallelize screening across multiple Boltz-2 NIM endpoints
+- Load balancing strategies (round-robin, least-loaded, weighted)
+- Automatic health checking and failover
+- Real-time endpoint statistics and monitoring
+- Both synchronous and asynchronous examples
+- Significant performance improvements for large screening campaigns
+
+**Run:** `python examples/multi_endpoint_screening.py`
+
 
 
 
@@ -105,6 +142,9 @@ export NVIDIA_API_KEY=your_api_key_here
 # Run individual examples
 python examples/01_basic_protein_folding.py
 python examples/02_protein_structure_prediction_with_msa.py
+python examples/10_msa_search_integration.py
+python examples/11_msa_search_large_protein.py
+python examples/12_msa_affinity_prediction.py
 # ... etc
 
 # Or use the CLI examples
@@ -121,7 +161,15 @@ boltz2 examples
 ### **Drug Discovery**
 - `03_protein_ligand_complex.py` - Drug-target interactions
 - `04_covalent_bonding.py` - Covalent drug design
-- `06_yaml_configurations.py` - Affinity predictions
+- `08_affinity_prediction.py` - Binding affinity predictions
+- `09_virtual_screening.py` - High-throughput compound screening
+- `12_msa_affinity_prediction.py` - MSA-guided affinity prediction
+
+### **MSA-Enhanced Predictions**
+- `02_protein_structure_prediction_with_msa.py` - MSA file integration
+- `10_msa_search_integration.py` - Automated MSA search
+- `11_msa_search_large_protein.py` - Large protein MSA optimization
+- `12_msa_affinity_prediction.py` - MSA + affinity predictions
 
 ### **Structural Biology**
 - `05_dna_protein_complex.py` - Nucleic acid interactions
@@ -131,6 +179,7 @@ boltz2 examples
 ### **Production Deployment**
 - `06_yaml_configurations.py` - Batch processing
 - `07_advanced_parameters.py` - Performance tuning
+- `multi_endpoint_screening.py` - Multi-endpoint parallelization
 
 ## 🔧 Configuration Examples
 
@@ -208,6 +257,8 @@ sequences:
 - ✅ NVIDIA hosted endpoints
 - ✅ Custom endpoints
 - ✅ Endpoint failover
+- ✅ Multi-endpoint with load balancing
+- ✅ Health checking and automatic recovery
 
 ## 🎯 Example Selection Guide
 
@@ -218,16 +269,19 @@ sequences:
 | Drug discovery | `03`, `04`, `08`, `09` |
 | Affinity prediction | `08` |
 | Virtual screening | `09` |
+| High-throughput screening | `10` (multi-endpoint) |
 | Complex systems | `05`, `07` |
-| Production setup | `06`, `07` |
+| Production setup | `06`, `07`, `10` |
 | Parameter tuning | `07` |
 | Batch processing | `06`, `07`, `09` |
+| Performance optimization | `10` (multi-endpoint) |
 
 ## 📚 Additional Resources
 
 - **Main Documentation**: `../README.md`
 - **YAML Guide**: `../YAML_GUIDE.md`
 - **Async Guide**: `../ASYNC_GUIDE.md`
+- **Multi-Endpoint Guide**: `../MULTI_ENDPOINT_GUIDE.md`
 - **CLI Help**: `boltz2 --help`
 
 ## 🐛 Troubleshooting
@@ -248,4 +302,10 @@ boltz2 examples
 
 # Test basic functionality
 python examples/01_basic_protein_folding.py
-``` 
+```
+
+---
+
+## Disclaimer
+
+This software is provided as-is without warranties of any kind. No guarantees are made regarding the accuracy, reliability, or fitness for any particular purpose. The underlying models and APIs are experimental and subject to change without notice. Users are responsible for validating all results and assessing suitability for their specific use cases. 

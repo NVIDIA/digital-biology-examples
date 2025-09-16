@@ -1,12 +1,79 @@
+# Python
 __pycache__/
 *.py[cod]
-*.egg-info/
-dist/
+*$py.class
+*.so
+.Python
 build/
-dev/
-example_outputs/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+test_results/
+*test_results*.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Output files
 *.cif
-*.log
+*.pdb
+*.a3m
+*.fasta
+*.sto
+affinities.json
+affinity_results.json
 prediction_metadata.json
-temp_*
-.DS_Store 
+structure_*.cif
+
+# Temporary files
+*.tmp
+*.log
+*.bak
+.cache/
+
+# Documentation builds
+docs/_build/
+site/
+
+# Package files
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Local test files
+test_*.py
+!tests/test_*.py
+batch_msa_test/
+test_batch_msa/

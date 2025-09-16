@@ -1,19 +1,3 @@
-# Boltz-2 NIM
-
-Boltz-2 NIM is a next-generation structural biology foundation model that shows strong performance for both structure and affinity prediction. Boltz-2 is the first deep learning model to approach the accuracy of free energy perturbation (FEP) methods in predicting binding affinities of small molecules and proteins—achieving strong correlations on benchmarks while being nearly 1000× more computationally efficient.
-
-Boltz-2 NIM can be accessed at [build.nvidia.com](https://docs.api.nvidia.com/nim/reference/mit-boltz2).
-
-Example notebooks on how to use Boltz-2 NIM endpoint: 
-- [Predicting protein-liagnd covalent complex](./examples/boltz2_nim_protein_ligand_covalent_complex_molstar_visualization.ipynb)
-- [Predicting protein-DNA complex](./examples/boltz2_nim_DNA_Protein_Complex_example_py3Dmol.ipynb)
-
-However, there's an easier way to access Boltz-2 NIM functionalities using the Boltz-2 client:
-- [Boltz-2 client demo](./examples/boltz2_demo.ipynb)
-
-Below is the description of the Boltz-2 client. Enjoy!
-
-
 # Boltz-2 Python Client
 
 Copyright (c) 2025, NVIDIA CORPORATION. All rights reserved.
@@ -35,6 +19,7 @@ A comprehensive Python client for NVIDIA's Boltz-2 biomolecular structure predic
 - ✅ **YAML Configuration** - Official Boltz format support
 - ✅ **Affinity Prediction** - Predict binding affinity (IC50) for protein-ligand complexes
 - ✅ **Virtual Screening** - High-level API for drug discovery campaigns
+- ✅ **MSA Search Integration** - GPU-accelerated MSA generation with NVIDIA MSA Search NIM
 - ✅ **Comprehensive Examples** - Ready-to-use code samples
 
 ## 📦 **Installation**
@@ -51,8 +36,8 @@ pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://
 
 ### From Source
 ```bash
-git clone https://github.com/NVIDIA/boltz2-python-client.git
-cd boltz2-python-client
+git clone https://github.com/NVIDIA/digital-biology-examples.git
+cd digital-biology-examples/examples/nims/boltz-2
 pip install -e .
 ```
 
@@ -108,6 +93,15 @@ boltz2 covalent "SEQUENCE" --ccd U4U --bond A:11:SG:L:C22
 
 # Virtual screening campaign
 boltz2 screen "TARGET_SEQUENCE" compounds.csv -o screening_results/
+
+# MSA search
+boltz2 msa-search "PROTEIN_SEQUENCE" --databases Uniref30_2302 colabfold_envdb_202108 --output msa.a3m
+
+# MSA search + structure prediction
+boltz2 msa-predict "PROTEIN_SEQUENCE" --databases Uniref30_2302 --max-sequences 1000
+
+# MSA search + ligand affinity
+boltz2 msa-ligand "PROTEIN_SEQUENCE" --smiles "LIGAND_SMILES" --predict-affinity
 ```
 
 ### Affinity Prediction
@@ -138,6 +132,40 @@ if result.affinities and "LIG" in result.affinities:
     print(f"Binding probability: {affinity.affinity_probability_binary[0]:.1%}")
 ```
 
+### MSA Search Integration (NEW)
+
+Integrate GPU-accelerated MSA Search NIM for enhanced protein structure predictions:
+
+```python
+from boltz2_client import Boltz2Client
+
+# Initialize and configure MSA Search
+client = Boltz2Client()
+client.configure_msa_search(
+    msa_endpoint_url="https://health.api.nvidia.com/v1/biology/nvidia/msa-search",
+    api_key="your_nvidia_api_key"  # Or set NVIDIA_API_KEY env var
+)
+
+# One-step MSA search + structure prediction
+result = await client.predict_with_msa_search(
+    sequence="MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLAGG",
+    databases=["Uniref30_2302", "PDB70_220313"],
+    max_msa_sequences=1000,
+    e_value=0.0001
+)
+
+print(f"Confidence: {result.confidence_scores[0]:.3f}")
+
+# Or just search MSA and save in different formats
+msa_path = await client.search_msa(
+    sequence="YOUR_PROTEIN_SEQUENCE",
+    output_format="a3m",  # Options: a3m, fasta, csv, sto
+    save_path="protein_msa.a3m"
+)
+```
+
+See the [MSA Search Guide](MSA_SEARCH_GUIDE.md) for detailed usage and parameters.
+
 ### Virtual Screening
 
 ```python
@@ -159,6 +187,37 @@ result = quick_screen(
 # Show top hits
 print(result.get_top_hits(n=5))
 ```
+
+### Multi-Endpoint Virtual Screening (NEW)
+
+Parallelize screening across multiple Boltz-2 NIM endpoints for better throughput:
+
+```python
+from boltz2_client import MultiEndpointClient, LoadBalanceStrategy, VirtualScreening
+
+# Configure multiple endpoints
+multi_client = MultiEndpointClient(
+    endpoints=[
+        "http://localhost:8000",
+        "http://localhost:8001",
+        "http://localhost:8002",
+    ],
+    strategy=LoadBalanceStrategy.LEAST_LOADED
+)
+
+# Use with virtual screening
+vs = VirtualScreening(client=multi_client)
+result = await vs.screen(
+    target_sequence="YOUR_PROTEIN_SEQUENCE",
+    compound_library=compounds,
+    predict_affinity=True
+)
+
+# View endpoint statistics
+multi_client.print_status()
+```
+
+See [MULTI_ENDPOINT_GUIDE.md](MULTI_ENDPOINT_GUIDE.md) for detailed setup instructions.
 
 ### 3D Visualization
 
@@ -242,7 +301,7 @@ docker run -it \
     -p 8000:8000 \
     -e NGC_API_KEY \
     -v "$LOCAL_NIM_CACHE":/opt/nim/.cache \
-    nvcr.io/nim/mit/boltz2:1.1.0
+    nvcr.io/nim/mit/boltz2:1.0.0
 ```
 
 #### Option B: Use Specific GPU (e.g., GPU 0)
@@ -253,7 +312,7 @@ docker run -it \
     -p 8000:8000 \
     -e NGC_API_KEY \
     -v "$LOCAL_NIM_CACHE":/opt/nim/.cache \
-    nvcr.io/nim/mit/boltz2:1.1.0
+    nvcr.io/nim/mit/boltz2:1.0.0
 ```
 
 ### Step 5: Verify Installation
@@ -360,7 +419,7 @@ async def batch_predictions():
 # With MSA file
 result = await client.predict_protein_structure(
     sequence="YOUR_SEQUENCE",
-    msa_file="path/to/alignment.a3m"
+    msa_files=[("path/to/alignment.a3m", "a3m")]
 )
 ```
 
@@ -403,6 +462,32 @@ if result.affinities and "LIG" in result.affinities:
     print(f"Binding probability: {affinity.affinity_probability_binary[0]:.3f}")
 ```
 
+#### 🧬 MSA-Guided Affinity Prediction
+Combine MSA search with affinity prediction for improved accuracy:
+
+```python
+# Configure MSA Search
+client.configure_msa_search("http://your-msa-nim:8000")
+
+# Predict with MSA + affinity in one call
+result = await client.predict_ligand_with_msa_search(
+    protein_sequence="YOUR_SEQUENCE",
+    ligand_smiles="CC(=O)OC1=CC=CC=C1C(=O)O",
+    predict_affinity=True,
+    databases=["Uniref30_2302", "PDB70_220313"],
+    max_msa_sequences=1000,
+    sampling_steps_affinity=300
+)
+
+# Or use existing MSA file
+result = await client.predict_protein_ligand_complex(
+    protein_sequence="YOUR_SEQUENCE",
+    ligand_smiles="LIGAND_SMILES",
+    msa_files=[("alignment.a3m", "a3m")],
+    predict_affinity=True
+)
+```
+
 #### CLI Usage
 ```bash
 # Basic affinity prediction
@@ -422,8 +507,8 @@ boltz2 ligand "PROTEIN_SEQUENCE" --ccd Y7W \
 
 ### Setup Development Environment
 ```bash
-git clone https://github.com/NVIDIA/boltz2-python-client.git
-cd boltz2-python-client
+git clone https://github.com/NVIDIA/digital-biology-examples.git
+cd digital-biology-examples/examples/nims/boltz-2
 pip install -e ".[dev]"
 ```
 
@@ -472,6 +557,7 @@ Third-party dependencies are licensed under their respective licenses - see the 
 ## 📚 **Documentation**
 
 ### Guides
+- **[MSA Search Guide](MSA_SEARCH_GUIDE.md)** - GPU-accelerated MSA generation with NVIDIA MSA Search NIM
 - **[Affinity Prediction Guide](AFFINITY_PREDICTION_GUIDE.md)** - Comprehensive guide for binding affinity prediction
 - **[YAML Configuration Guide](YAML_GUIDE.md)** - Working with YAML configuration files
 - **[Async Programming Guide](ASYNC_GUIDE.md)** - Best practices for async operations
@@ -490,6 +576,12 @@ Third-party dependencies are licensed under their respective licenses - see the 
 - NVIDIA BioNeMo Team for the Boltz-2 service
 - Contributors and testers
 - Open source community
+
+---
+
+## Disclaimer
+
+This software is provided as-is without warranties of any kind. No guarantees are made regarding the accuracy, reliability, or fitness for any particular purpose. The underlying models and APIs are experimental and subject to change without notice. Users are responsible for validating all results and assessing suitability for their specific use cases.
 
 ---
 
