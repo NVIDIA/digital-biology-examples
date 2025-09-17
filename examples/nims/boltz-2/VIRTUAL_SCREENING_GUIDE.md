@@ -47,6 +47,15 @@ boltz2 screen target.fasta library.csv --pocket-residues "10,15,20,25" --pocket-
 
 # Disable affinity prediction for faster screening
 boltz2 screen "SEQUENCE" compounds.json --no-affinity -o fast_screen/
+
+# Use multiple endpoints for parallel screening (NEW)
+boltz2 --multi-endpoint "http://localhost:8000,http://localhost:8001,http://localhost:8002" \
+  screen "PROTEIN_SEQUENCE" compounds.csv -o multi_results/
+
+# Multi-endpoint with load balancing strategy
+boltz2 --multi-endpoint "http://localhost:8000,http://localhost:8001" \
+  --load-balance-strategy least-loaded \
+  screen target.fasta large_library.csv --predict-affinity
 ```
 
 ## Compound Libraries
@@ -181,7 +190,7 @@ print(stats)
 ```python
 # Save all results and structures
 saved_files = result.save_results(
-    output_dir="screening_campaign",
+    output_dir="screening_campaign", 
     save_structures=True  # Save CIF files
 )
 
@@ -193,7 +202,25 @@ saved_files = result.save_results(
 
 ## Performance Tips
 
-1. **Use Async Client for Large Libraries**
+1. **Use Multi-Endpoint Client for Parallel Processing** (NEW)
+   ```python
+   from boltz2_client import MultiEndpointClient, LoadBalanceStrategy
+   
+   # Configure multiple endpoints for better throughput
+   multi_client = MultiEndpointClient(
+       endpoints=[
+           "http://localhost:8000",
+           "http://localhost:8001",
+           "http://localhost:8002",
+       ],
+       strategy=LoadBalanceStrategy.LEAST_LOADED,
+       is_async=True
+   )
+   screener = VirtualScreening(client=multi_client, max_workers=8)
+   ```
+   See [MULTI_ENDPOINT_GUIDE.md](MULTI_ENDPOINT_GUIDE.md) for detailed setup.
+
+2. **Use Async Client for Large Libraries**
    ```python
    from boltz2_client import Boltz2Client
    
@@ -201,11 +228,11 @@ saved_files = result.save_results(
    screener = VirtualScreening(client=client, max_workers=8)
    ```
 
-2. **Adjust Sampling for Speed vs Accuracy**
+3. **Adjust Sampling for Speed vs Accuracy**
    - For initial screening: `sampling_steps=20, sampling_steps_affinity=50`
    - For final hits: `sampling_steps=100, sampling_steps_affinity=200`
 
-3. **Batch Processing for Memory Management**
+4. **Batch Processing for Memory Management**
    ```python
    # For libraries with 1000+ compounds
    result = screener.screen(
@@ -216,7 +243,7 @@ saved_files = result.save_results(
    )
    ```
 
-4. **Disable Affinity for Structure-Only Screening**
+5. **Disable Affinity for Structure-Only Screening**
    ```python
    result = screener.screen(
        target_sequence=sequence,
@@ -291,4 +318,9 @@ df.to_excel("screening_results.xlsx", index=False)
 
 ## API Reference
 
-See the [API documentation](API_REFERENCE.md) for detailed parameter descriptions. 
+See the [API documentation](API_REFERENCE.md) for detailed parameter descriptions.
+---
+
+## Disclaimer
+
+This software is provided as-is without warranties of any kind. No guarantees are made regarding the accuracy, reliability, or fitness for any particular purpose. The underlying models and APIs are experimental and subject to change without notice. Users are responsible for validating all results and assessing suitability for their specific use cases.

@@ -12,8 +12,9 @@ This document provides a comprehensive reference for all available Boltz-2 API p
 4. [Constraints](#constraints)
 5. [Advanced Parameters](#advanced-parameters)
 6. [MSA Parameters](#msa-parameters)
-7. [Parameter Combinations](#parameter-combinations)
-8. [Usage Examples](#usage-examples)
+7. [Affinity Prediction Parameters](#affinity-prediction-parameters)
+8. [Parameter Combinations](#parameter-combinations)
+9. [Usage Examples](#usage-examples)
 
 ## Core Parameters
 
@@ -233,6 +234,90 @@ polymer = Polymer(
     sequence="MKTVRQERLK...",
     msa=[msa_record]
 )
+```
+
+## Affinity Prediction Parameters
+
+### Ligand-Specific Parameters
+
+#### `predict_affinity` (bool)
+- **Description**: Enable affinity prediction for a specific ligand
+- **Default**: False
+- **Required**: No
+- **Note**: Only ONE ligand per request can have this enabled
+- **Example**:
+```python
+ligand = Ligand(
+    id="LIG",
+    smiles="CC(=O)OC1=CC=CC=C1C(=O)O",
+    predict_affinity=True  # Enable affinity prediction
+)
+```
+
+### Global Affinity Parameters
+
+#### `sampling_steps_affinity` (int)
+- **Description**: Number of sampling steps for affinity prediction
+- **Range**: 10-1000
+- **Default**: 200
+- **Effect**: Higher values may improve accuracy but increase runtime
+- **Recommendations**:
+  - 50-100: Fast testing
+  - 200-300: Production use
+  - 500-1000: High accuracy research
+
+#### `diffusion_samples_affinity` (int)
+- **Description**: Number of diffusion samples for affinity prediction
+- **Range**: 1-10
+- **Default**: 5
+- **Effect**: Higher values provide ensemble predictions and reliability
+- **Recommendations**:
+  - 1-3: Fast predictions
+  - 5-8: Balanced accuracy
+  - 10: Maximum ensemble diversity
+
+#### `affinity_mw_correction` (bool)
+- **Description**: Apply molecular weight correction to affinity predictions
+- **Default**: False
+- **Effect**: Adjusts predictions based on ligand molecular weight
+- **Usage**: Recommended for diverse ligand libraries
+
+### Affinity Response Fields
+
+The response includes an `affinities` dictionary with the following fields for each ligand:
+
+- `affinity_pred_value`: Raw affinity predictions (log scale)
+- `affinity_pic50`: pIC50 values (-log10 of IC50 in M)
+- `affinity_probability_binary`: Binary binding probability (0-1)
+- `model_*_affinity_*`: Individual model predictions for ensemble analysis
+
+### Affinity Usage Example
+
+```python
+from boltz2_client import Boltz2Client, Polymer, Ligand
+
+client = Boltz2Client()
+
+# Define protein and ligand
+protein = Polymer(id="A", molecule_type="protein", sequence="YOUR_SEQUENCE")
+ligand = Ligand(id="LIG", smiles="YOUR_SMILES", predict_affinity=True)
+
+# Predict with affinity
+result = await client.predict_structure(
+    polymers=[protein],
+    ligands=[ligand],
+    sampling_steps_affinity=300,
+    diffusion_samples_affinity=8,
+    affinity_mw_correction=True
+)
+
+# Access results
+if result.affinities and "LIG" in result.affinities:
+    affinity = result.affinities["LIG"]
+    ic50_nm = 10**(-affinity.affinity_pic50[0]) * 1e9
+    print(f"pIC50: {affinity.affinity_pic50[0]:.2f}")
+    print(f"IC50: {ic50_nm:.1f} nM")
+    print(f"Binding probability: {affinity.affinity_probability_binary[0]:.1%}")
 ```
 
 ## Parameter Combinations
@@ -551,4 +636,9 @@ For complete CLI documentation, run:
 boltz2 --help
 boltz2 covalent --help
 boltz2 examples
-``` 
+```
+---
+
+## Disclaimer
+
+This software is provided as-is without warranties of any kind. No guarantees are made regarding the accuracy, reliability, or fitness for any particular purpose. The underlying models and APIs are experimental and subject to change without notice. Users are responsible for validating all results and assessing suitability for their specific use cases.

@@ -204,4 +204,9 @@ The `boltz2-python-client` package is now fully functional for covalent protein-
 - ✅ Comprehensive error handling and validation
 - ✅ Professional file output and result management
 
-You can now use this package for production covalent complex predictions! 🧪✨ 
+You can now use this package for production covalent complex predictions! 🧪✨
+---
+
+## Disclaimer
+
+This software is provided as-is without warranties of any kind. No guarantees are made regarding the accuracy, reliability, or fitness for any particular purpose. The underlying models and APIs are experimental and subject to change without notice. Users are responsible for validating all results and assessing suitability for their specific use cases.

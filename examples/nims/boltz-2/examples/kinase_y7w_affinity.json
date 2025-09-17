@@ -1,0 +1,10 @@
+{
+  "ligand_id": "Y7W",
+  "ligand_ccd": "Y7W",
+  "predictions": {
+    "log_ic50": -0.04660460352897644,
+    "pic50": 8.247568679213524,
+    "binding_probability": 0.7713989019393921,
+    "ic50_nm": 5.654983222638996
+  }
+}

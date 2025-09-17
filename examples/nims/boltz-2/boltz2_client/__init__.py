@@ -26,8 +26,9 @@ Example:
     >>> print(f"Confidence: {result.confidence_scores[0]:.3f}")
 """
 
-__version__ = "0.2"
+__version__ = "0.3.0"
 __author__ = "NVIDIA Corporation"
+__email__ = "bionemo-support@nvidia.com"
 
 from .client import Boltz2Client, Boltz2SyncClient, EndpointType
 from .models import (
@@ -39,6 +40,7 @@ from .models import (
     BondConstraint,
     Atom,
     AlignmentFileRecord,
+    AlignmentFormat,
     HealthStatus,
     ServiceMetadata,
 )
@@ -56,6 +58,18 @@ from .virtual_screening import (
     CompoundLibrary,
     VirtualScreeningResult,
     quick_screen,
+)
+from .multi_endpoint_client import (
+    MultiEndpointClient,
+    LoadBalanceStrategy,
+    EndpointConfig,
+)
+from .msa_search import (
+    MSASearchClient,
+    MSASearchIntegration,
+    MSASearchRequest,
+    MSASearchResponse,
+    MSAFormatConverter,
 )
 
 # Optional imports for visualization
@@ -95,6 +109,7 @@ __all__ = [
     "BondConstraint",
     "Atom",
     "AlignmentFileRecord",
+    "AlignmentFormat",
     "HealthStatus",
     "ServiceMetadata",
     "AffinityPrediction",
@@ -112,6 +127,18 @@ __all__ = [
     "CompoundLibrary",
     "VirtualScreeningResult",
     "quick_screen",
+    
+    # Multi-endpoint support
+    "MultiEndpointClient",
+    "LoadBalanceStrategy",
+    "EndpointConfig",
+    
+    # MSA Search NIM integration
+    "MSASearchClient",
+    "MSASearchIntegration",
+    "MSASearchRequest",
+    "MSASearchResponse",
+    "MSAFormatConverter",
 ]
 
 # Add visualization exports if available

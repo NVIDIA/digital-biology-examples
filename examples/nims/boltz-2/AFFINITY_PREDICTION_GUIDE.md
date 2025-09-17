@@ -157,8 +157,132 @@ result = await client.predict_structure(
 2. **Computational Cost**: Significantly increases prediction time
 3. **Accuracy**: Predictions are estimates and should be validated experimentally
 
+## MSA-Guided Affinity Prediction
+
+### Overview
+
+Combining MSA (Multiple Sequence Alignment) with affinity prediction can improve results by:
+- Providing more accurate protein structures through evolutionary information
+- Better capturing conformational states relevant for ligand binding
+- Improving binding site geometry predictions
+
+### Method 1: Integrated MSA Search + Affinity
+
+Use the new `predict_ligand_with_msa_search()` method for a streamlined workflow:
+
+```python
+# Configure MSA Search
+client.configure_msa_search(
+    msa_endpoint_url="http://your-msa-nim:8000"
+)
+
+# Predict with MSA search and affinity in one call
+result = await client.predict_ligand_with_msa_search(
+    protein_sequence="YOUR_PROTEIN_SEQUENCE",
+    ligand_smiles="YOUR_LIGAND_SMILES",
+    predict_affinity=True,
+    databases=["uniref90", "pdb70"],
+    max_msa_sequences=1000,
+    sampling_steps_affinity=300,
+    diffusion_samples_affinity=8,
+    affinity_mw_correction=True
+)
+
+# Access results
+if result.affinities and "LIG" in result.affinities:
+    aff = result.affinities["LIG"]
+    print(f"pIC50: {aff.affinity_pic50[0]:.3f}")
+    print(f"IC50: {aff.affinity_ic50[0]:.3f} nM")
+```
+
+### Method 2: Using Pre-computed MSA
+
+If you already have an MSA file:
+
+```python
+result = await client.predict_protein_ligand_complex(
+    protein_sequence="YOUR_SEQUENCE",
+    ligand_smiles="LIGAND_SMILES",
+    msa_files=[("alignment.a3m", "a3m")],  # Add MSA file
+    predict_affinity=True,
+    sampling_steps_affinity=300
+)
+```
+
+### Method 3: Manual MSA + Custom Request
+
+For full control over the process:
+
+```python
+# Step 1: Search for MSA
+msa_response = await client.search_msa(
+    sequence=protein_sequence,
+    databases=["all"],
+    max_msa_sequences=1000
+)
+
+# Step 2: Create protein with MSA
+from boltz2_client import AlignmentFileRecord
+
+msa_record = AlignmentFileRecord(
+    alignment=msa_content,
+    format="a3m"
+)
+
+protein = Polymer(
+    id="A",
+    molecule_type="protein",
+    sequence=protein_sequence,
+    msa={"default": {"a3m": msa_record}}
+)
+
+# Step 3: Create ligand with affinity
+ligand = Ligand(
+    id="LIG",
+    smiles=ligand_smiles,
+    predict_affinity=True
+)
+
+# Step 4: Predict
+request = PredictionRequest(
+    polymers=[protein],
+    ligands=[ligand],
+    sampling_steps_affinity=300,
+    diffusion_samples_affinity=8
+)
+
+result = await client.predict(request)
+```
+
+### Recommended Parameters for MSA + Affinity
+
+For optimal results when combining MSA with affinity prediction:
+
+```python
+# MSA parameters
+databases = ["uniref90", "pdb70"]  # High-quality databases
+max_msa_sequences = 1000  # More sequences for better coverage
+e_value = 0.0001  # Strict threshold
+
+# Structure prediction
+recycling_steps = 5  # Higher for accuracy
+sampling_steps = 100  # Balance speed/quality
+
+# Affinity prediction
+sampling_steps_affinity = 300  # Higher for better estimates
+diffusion_samples_affinity = 8  # More samples for reliability
+affinity_mw_correction = True  # Often improves accuracy
+```
+
 ## See Also
 
 - `examples/08_affinity_prediction.py` - Complete working example
+- `examples/12_msa_affinity_prediction.py` - MSA + affinity example
 - [Chemical Component Dictionary](https://www.wwpdb.org/data/ccd) - For CCD codes
-- API documentation at `http://localhost:8000/docs` 
+- API documentation at `http://localhost:8000/docs`
+
+---
+
+## Disclaimer
+
+This software is provided as-is without warranties of any kind. No guarantees are made regarding the accuracy, reliability, or fitness for any particular purpose. The underlying models and APIs are experimental and subject to change without notice. Users are responsible for validating all results and assessing suitability for their specific use cases. 

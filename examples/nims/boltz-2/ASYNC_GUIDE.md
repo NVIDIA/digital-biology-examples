@@ -271,6 +271,41 @@ async def process_in_chunks(sequences, chunk_size=10):
 
 ## Performance Optimization
 
+### Multi-Endpoint for Maximum Throughput
+
+For the highest throughput, use multiple Boltz-2 endpoints with load balancing:
+
+```python
+from boltz2_client import MultiEndpointClient, LoadBalanceStrategy
+
+# Configure multiple endpoints
+multi_client = MultiEndpointClient(
+    endpoints=[
+        "http://localhost:8000",
+        "http://localhost:8001",
+        "http://localhost:8002",
+    ],
+    strategy=LoadBalanceStrategy.LEAST_LOADED,
+    is_async=True
+)
+
+# Use with async batch processing
+async def multi_endpoint_batch(sequences):
+    tasks = []
+    for seq in sequences:
+        request = PredictionRequest(
+            polymers=[Polymer(id="A", molecule_type="protein", sequence=seq)],
+            recycling_steps=1,
+            sampling_steps=20
+        )
+        tasks.append(multi_client.predict(request))
+    
+    results = await asyncio.gather(*tasks)
+    return results
+```
+
+See [MULTI_ENDPOINT_GUIDE.md](MULTI_ENDPOINT_GUIDE.md) for detailed setup instructions.
+
 ### Optimal Concurrency Settings
 
 ```python
@@ -467,4 +502,9 @@ start = time.time()
 print(f"Total time: {time.time() - start:.2f}s")
 ```
 
-This guide provides a comprehensive foundation for async protein folding with the Boltz-2 Python client. Start with the simple examples and gradually implement more advanced patterns as needed. 
+This guide provides a comprehensive foundation for async protein folding with the Boltz-2 Python client. Start with the simple examples and gradually implement more advanced patterns as needed.
+---
+
+## Disclaimer
+
+This software is provided as-is without warranties of any kind. No guarantees are made regarding the accuracy, reliability, or fitness for any particular purpose. The underlying models and APIs are experimental and subject to change without notice. Users are responsible for validating all results and assessing suitability for their specific use cases.

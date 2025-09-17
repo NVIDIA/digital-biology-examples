@@ -47,7 +47,7 @@ class Polymer(BaseModel):
     sequence: str = Field(..., description="Sequence string")
     cyclic: bool = Field(False, description="Whether the polymer is cyclic")
     modifications: List[Modification] = Field(default_factory=list, description="List of modifications")
-    msa: Optional[List[AlignmentFileRecord]] = Field(None, description="Multiple Sequence Alignments")
+    msa: Optional[Dict[str, Dict[str, AlignmentFileRecord]]] = Field(None, description="A Dictionary [database_name -> [format -> AlignmentFileRecord]] containing alignments")
     
     @validator('sequence')
     def validate_sequence(cls, v, values):
