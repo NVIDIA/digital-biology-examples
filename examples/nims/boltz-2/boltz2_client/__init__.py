@@ -26,7 +26,7 @@ Example:
     >>> print(f"Confidence: {result.confidence_scores[0]:.3f}")
 """
 
-__version__ = "0.3.0"
+__version__ = "0.3.2"
 __author__ = "NVIDIA Corporation"
 __email__ = "bionemo-support@nvidia.com"
 
@@ -70,6 +70,23 @@ from .msa_search import (
     MSASearchRequest,
     MSASearchResponse,
     MSAFormatConverter,
+)
+from .a3m_to_csv_converter import (
+    A3MToCSVConverter,
+    A3MParser,
+    A3MMSA,
+    A3MSequence,
+    convert_a3m_to_multimer_csv,
+    create_multimer_msa_request,
+    create_paired_msa_per_chain,
+    save_prediction_outputs,
+    get_prediction_summary,
+    ConversionResult,
+    GreedyPairingStrategy,
+    CompletePairingStrategy,
+    TaxonomyPairingStrategy,
+    SpeciesMapper,
+    SPECIES_TO_TAXID,
 )
 
 # Optional imports for visualization
@@ -139,6 +156,23 @@ __all__ = [
     "MSASearchRequest",
     "MSASearchResponse",
     "MSAFormatConverter",
+    
+    # A3M to CSV Multimer Converter
+    "A3MToCSVConverter",
+    "A3MParser",
+    "A3MMSA",
+    "A3MSequence",
+    "convert_a3m_to_multimer_csv",
+    "create_multimer_msa_request",
+    "create_paired_msa_per_chain",
+    "save_prediction_outputs",
+    "get_prediction_summary",
+    "ConversionResult",
+    "GreedyPairingStrategy",
+    "CompletePairingStrategy",
+    "TaxonomyPairingStrategy",
+    "SpeciesMapper",
+    "SPECIES_TO_TAXID",
 ]
 
 # Add visualization exports if available

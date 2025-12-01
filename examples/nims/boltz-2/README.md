@@ -20,6 +20,8 @@ A comprehensive Python client for NVIDIA's Boltz-2 biomolecular structure predic
 - ✅ **Affinity Prediction** - Predict binding affinity (IC50) for protein-ligand complexes
 - ✅ **Virtual Screening** - High-level API for drug discovery campaigns
 - ✅ **MSA Search Integration** - GPU-accelerated MSA generation with NVIDIA MSA Search NIM
+- ✅ **A3M to Multimer MSA** - Convert ColabFold A3M files to paired multimer format (NEW)
+- ✅ **Multi-Endpoint Load Balancing** - Distribute predictions across multiple NIMs
 - ✅ **Comprehensive Examples** - Ready-to-use code samples
 
 ## 📦 **Installation**
@@ -102,6 +104,16 @@ boltz2 msa-predict "PROTEIN_SEQUENCE" --databases Uniref30_2302 --max-sequences 
 
 # MSA search + ligand affinity
 boltz2 msa-ligand "PROTEIN_SEQUENCE" --smiles "LIGAND_SMILES" --predict-affinity
+
+# Convert ColabFold A3M files to paired multimer CSV
+boltz2 convert-msa chain_A.a3m chain_B.a3m -c A,B -o paired.csv
+
+# One-command multimer prediction from A3M files (NEW)
+boltz2 multimer-msa chain_A.a3m chain_B.a3m -c A,B -o complex.cif
+
+# Multi-endpoint multimer prediction
+boltz2 --multi-endpoint --base-url "http://gpu1:8000,http://gpu2:8000" \
+    multimer-msa chain_A.a3m chain_B.a3m -c A,B -o complex.cif
 ```
 
 ### Affinity Prediction
@@ -165,6 +177,103 @@ msa_path = await client.search_msa(
 ```
 
 See the [MSA Search Guide](MSA_SEARCH_GUIDE.md) for detailed usage and parameters.
+
+### A3M to Multimer MSA Conversion (NEW)
+
+Convert ColabFold-generated A3M monomer MSA files to paired multimer format for Boltz2:
+
+```python
+from boltz2_client import (
+    Boltz2Client,
+    convert_a3m_to_multimer_csv,
+    create_paired_msa_per_chain,
+    Polymer, PredictionRequest
+)
+
+# Convert A3M files to paired MSA (auto-detects pairing mode)
+result = convert_a3m_to_multimer_csv(
+    a3m_files={'A': 'chain_A.a3m', 'B': 'chain_B.a3m'}
+)
+print(f"Paired {result.num_pairs} sequences")
+
+# Create per-chain MSA structures for Boltz2
+msa_per_chain = create_paired_msa_per_chain(result)
+
+# Create polymers with paired MSA
+protein_A = Polymer(id="A", molecule_type="protein", 
+                    sequence=result.query_sequences['A'],
+                    msa=msa_per_chain['A'])
+protein_B = Polymer(id="B", molecule_type="protein",
+                    sequence=result.query_sequences['B'],
+                    msa=msa_per_chain['B'])
+
+# Predict complex structure
+client = Boltz2Client(base_url="http://localhost:8000")
+response = await client.predict(PredictionRequest(
+    polymers=[protein_A, protein_B],
+    recycling_steps=3,
+    sampling_steps=200
+))
+```
+
+#### CLI One-Command Prediction
+```bash
+# Predict directly from A3M files (converts + predicts in one step)
+boltz2 --base-url http://localhost:8000 multimer-msa \
+    chain_A.a3m chain_B.a3m \
+    -c A,B \
+    -o complex.cif
+
+# Save all outputs: structure, paired CSVs, and confidence scores
+boltz2 --base-url http://localhost:8000 multimer-msa \
+    chain_A.a3m chain_B.a3m \
+    -c A,B \
+    -o complex.cif \
+    --save-csv \    # Save paired CSV files
+    --save-all      # Save scores JSON (confidence, pLDDT, pTM, etc.)
+
+# With multi-endpoint load balancing
+boltz2 --multi-endpoint \
+    --base-url "http://gpu1:8000,http://gpu2:8000,http://gpu3:8000" \
+    multimer-msa chain_A.a3m chain_B.a3m -c A,B -o complex.cif --save-all
+```
+
+**Output files with `--save-all --save-csv`:**
+```
+output/
+├── complex.cif              # 3D structure (mmCIF)
+├── complex.scores.json      # Confidence scores, pLDDT, pTM, metrics
+├── complex_chain_A.csv      # Paired MSA for chain A
+└── complex_chain_B.csv      # Paired MSA for chain B
+```
+
+#### Save All Outputs (Python API)
+```python
+from boltz2_client import save_prediction_outputs, get_prediction_summary
+
+# Save all outputs with one function call
+paths = save_prediction_outputs(
+    response=response,
+    output_dir=Path("results"),
+    base_name="my_complex",
+    save_structure=True,   # Save CIF file(s)
+    save_scores=True,      # Save scores JSON
+    save_csv=True,         # Save paired CSVs
+    conversion_result=result  # From convert_a3m_to_multimer_csv
+)
+print(paths)
+# {'structure': Path('results/my_complex.cif'),
+#  'scores': Path('results/my_complex.scores.json'),
+#  'csv_A': Path('results/my_complex_chain_A.csv'),
+#  'csv_B': Path('results/my_complex_chain_B.csv')}
+
+# Get a quick summary of prediction quality
+summary = get_prediction_summary(response)
+print(f"Confidence: {summary['confidence']:.2f}")
+print(f"Quality: {summary['quality_assessment']}")  # Very High/High/Medium/Low
+```
+
+See the [A3M to Multimer MSA Guide](examples/A3M_TO_MULTIMER_MSA.md) for detailed usage.
 
 ### Virtual Screening
 
@@ -383,6 +492,9 @@ The `examples/` directory contains comprehensive examples:
 - **06_yaml_configurations.py** - YAML config files
 - **07_advanced_parameters.py** - Advanced API parameters
 - **08_affinity_prediction.py** - Binding affinity prediction (IC50/pIC50)
+- **15_a3m_to_multimer_csv.py** - A3M to multimer MSA conversion
+- **16_colabfold_a3m_to_multimer.ipynb** - Interactive notebook for multimer MSA (NEW)
+- **A3M_TO_MULTIMER_MSA.md** - Comprehensive guide for A3M conversion (NEW)
 
 ## 🧪 **Supported Prediction Types**
 
@@ -558,10 +670,12 @@ Third-party dependencies are licensed under their respective licenses - see the 
 
 ### Guides
 - **[MSA Search Guide](MSA_SEARCH_GUIDE.md)** - GPU-accelerated MSA generation with NVIDIA MSA Search NIM
+- **[A3M to Multimer MSA Guide](examples/A3M_TO_MULTIMER_MSA.md)** - Convert ColabFold A3M files to paired multimer format (NEW)
 - **[Affinity Prediction Guide](AFFINITY_PREDICTION_GUIDE.md)** - Comprehensive guide for binding affinity prediction
 - **[YAML Configuration Guide](YAML_GUIDE.md)** - Working with YAML configuration files
 - **[Async Programming Guide](ASYNC_GUIDE.md)** - Best practices for async operations
 - **[Covalent Complex Guide](COVALENT_COMPLEX_GUIDE.md)** - Predicting covalent bonds
+- **[Multi-Endpoint Guide](MULTI_ENDPOINT_GUIDE.md)** - Load balancing across multiple NIMs
 - **[Parameters Guide](PARAMETERS.md)** - Detailed parameter documentation
 
 ## 🔗 **Links**

@@ -1520,6 +1520,400 @@ def screen(ctx, target_sequence, compounds_file, target_name, output_dir, no_aff
             raise click.Abort()
 
 
+@cli.command(name='convert-msa')
+@click.argument('a3m_files', nargs=-1, type=click.Path(exists=True))
+@click.option('--chain-ids', '-c', type=str, required=True,
+              help='Comma-separated chain IDs corresponding to A3M files (e.g., "A,B")')
+@click.option('--output', '-o', type=click.Path(), required=True,
+              help='Output CSV file path')
+@click.option('--max-pairs', type=int, default=None,
+              help='Maximum number of paired sequences to include')
+@click.option('--pairing-strategy', type=click.Choice(['greedy', 'complete', 'taxonomy']), 
+              default='greedy',
+              help='Strategy for pairing sequences (default: greedy, like ColabFold)')
+@click.option('--pairing-mode', type=click.Choice(['auto', 'taxid', 'uniref']),
+              default='auto',
+              help='Pairing identifier mode: auto (default, like ColabFold), taxid, or uniref')
+@click.pass_context
+def convert_msa_command(ctx, a3m_files: Tuple[str, ...], chain_ids: str, 
+                        output: str, max_pairs: Optional[int], 
+                        pairing_strategy: str, pairing_mode: str):
+    """
+    Convert ColabFold A3M monomer MSA files to Boltz2 multimer CSV format.
+    
+    This command pairs sequences from individual monomer A3M MSA files
+    based on organism/species matching and outputs a CSV file suitable
+    for Boltz2 multimer structure predictions.
+    
+    The CSV format has two columns: 'key' and 'sequence'
+    Sequences with the same 'key' are paired (from same organism).
+    Multiple chain sequences are separated by ':' in the sequence column.
+    
+    PAIRING MODE (ColabFold-compatible):
+    
+    \b
+    - auto (default): Like ColabFold. Auto-detects if TaxIDs are present.
+                      Uses TaxID pairing if >50% sequences have TaxIDs,
+                      otherwise falls back to UniRef cluster ID pairing.
+    - taxid: Force TaxID-based pairing (requires OX= fields or species codes)
+    - uniref: Force UniRef cluster ID pairing (works with all ColabFold output)
+    
+    Examples:
+    
+    \b
+    # Default ColabFold-style (auto-detect pairing mode)
+    boltz2 convert-msa chain_A.a3m chain_B.a3m -c A,B -o paired.csv
+    
+    \b
+    # Force UniRef ID pairing (standard ColabFold output without TaxIDs)
+    boltz2 convert-msa chain_A.a3m chain_B.a3m -c A,B -o paired.csv --pairing-mode uniref
+    
+    \b
+    # Force TaxID pairing (requires taxonomy annotations)
+    boltz2 convert-msa chain_A.a3m chain_B.a3m -c A,B -o paired.csv --pairing-mode taxid
+    
+    \b
+    # Convert three chains with max pairs limit
+    boltz2 convert-msa chainA.a3m chainB.a3m chainC.a3m -c A,B,C -o paired.csv --max-pairs 1000
+    """
+    from .a3m_to_csv_converter import convert_a3m_to_multimer_csv
+    
+    # Parse chain IDs
+    chain_id_list = [c.strip() for c in chain_ids.split(',')]
+    
+    if len(chain_id_list) != len(a3m_files):
+        print_error(f"Number of chain IDs ({len(chain_id_list)}) must match number of A3M files ({len(a3m_files)})")
+        raise click.Abort()
+    
+    if len(a3m_files) < 2:
+        print_error("At least 2 A3M files are required for multimer pairing")
+        raise click.Abort()
+    
+    # Create mapping of chain IDs to file paths
+    a3m_file_dict = {chain_id: Path(filepath) for chain_id, filepath in zip(chain_id_list, a3m_files)}
+    
+    # Convert pairing_mode to use_tax_id
+    use_tax_id = None  # auto-detect (default)
+    if pairing_mode == 'taxid':
+        use_tax_id = True
+    elif pairing_mode == 'uniref':
+        use_tax_id = False
+    # else: pairing_mode == 'auto', use_tax_id = None (auto-detect)
+    
+    print_info("A3M to CSV Multimer Converter (ColabFold-compatible)")
+    print_info(f"Input files:")
+    for chain_id, filepath in a3m_file_dict.items():
+        print(f"  Chain {chain_id}: {filepath}")
+    print_info(f"Output: {output}")
+    print_info(f"Pairing strategy: {pairing_strategy}")
+    print_info(f"Pairing mode: {pairing_mode}")
+    if max_pairs:
+        print_info(f"Max pairs: {max_pairs}")
+    
+    try:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Converting MSA files...", total=None)
+            
+            result = convert_a3m_to_multimer_csv(
+                a3m_files=a3m_file_dict,
+                output_path=Path(output),
+                pairing_strategy=pairing_strategy,
+                use_tax_id=use_tax_id,
+                max_pairs=max_pairs
+            )
+            
+            progress.update(task, description="Conversion completed!")
+        
+        print_success("MSA conversion completed successfully!")
+        print_info(f"Paired sequences: {result.num_pairs}")
+        print_info(f"Chain IDs: {', '.join(result.chain_ids)}")
+        print_info(f"Output file: {output}")
+        
+        # Show query sequence lengths
+        print_info("Query sequence lengths:")
+        for chain_id, seq in result.query_sequences.items():
+            print(f"  Chain {chain_id}: {len(seq)} residues")
+        
+        # Show preview of CSV
+        lines = result.csv_content.split('\n')
+        if len(lines) > 4:
+            print_info("CSV preview (first 3 pairs):")
+            for line in lines[:4]:
+                print(f"  {line[:100]}{'...' if len(line) > 100 else ''}")
+        
+    except Exception as e:
+        print_error(f"Conversion failed: {e}")
+        raise click.Abort()
+
+
+@cli.command(name='multimer-msa')
+@click.argument('a3m_files', nargs=-1, type=click.Path(exists=True))
+@click.option('--chain-ids', '-c', type=str, required=True,
+              help='Comma-separated chain IDs corresponding to A3M files (e.g., "A,B")')
+@click.option('--output', '-o', type=click.Path(), default=None,
+              help='Output CIF file path (default: complex.cif)')
+@click.option('--save-csv', is_flag=True, default=False,
+              help='Save the generated paired CSV files alongside the CIF output')
+@click.option('--save-all', is_flag=True, default=False,
+              help='Save all outputs: CIF, confidence scores, metrics as JSON')
+@click.option('--max-pairs', type=int, default=None,
+              help='Maximum number of paired sequences to include')
+@click.option('--pairing-mode', type=click.Choice(['auto', 'taxid', 'uniref']),
+              default='auto',
+              help='Pairing identifier mode: auto (default), taxid, or uniref')
+@click.option('--recycling-steps', type=int, default=3,
+              help='Number of recycling steps (default: 3)')
+@click.option('--sampling-steps', type=int, default=200,
+              help='Number of diffusion sampling steps (default: 200)')
+@click.option('--diffusion-samples', type=int, default=1,
+              help='Number of diffusion samples/structures (default: 1)')
+@click.pass_context
+def multimer_msa_command(ctx, a3m_files: Tuple[str, ...], chain_ids: str, 
+                         output: Optional[str], save_csv: bool, save_all: bool,
+                         max_pairs: Optional[int], pairing_mode: str, 
+                         recycling_steps: int, sampling_steps: int, 
+                         diffusion_samples: int):
+    """
+    Predict multimer structure from ColabFold A3M monomer MSA files.
+    
+    This command performs the complete workflow:
+    1. Converts A3M files to paired MSA format (ColabFold-style)
+    2. Submits prediction to Boltz2 NIM
+    3. Saves the predicted structure as CIF file
+    
+    PAIRING MODE (ColabFold-compatible):
+    
+    \b
+    - auto (default): Auto-detects if TaxIDs are present in headers
+    - taxid: Force TaxID-based pairing (requires OX= or species codes)
+    - uniref: Force UniRef cluster ID pairing (all ColabFold output)
+    
+    Examples:
+    
+    \b
+    # Predict heterodimer from two A3M files (auto-detect pairing)
+    boltz2 multimer-msa chain_A.a3m chain_B.a3m -c A,B
+    
+    \b
+    # Predict with specific output file
+    boltz2 multimer-msa chain_A.a3m chain_B.a3m -c A,B -o my_complex.cif
+    
+    \b
+    # Use UniRef pairing for standard ColabFold output
+    boltz2 multimer-msa chain_A.a3m chain_B.a3m -c A,B --pairing-mode uniref
+    
+    \b
+    # Predict trimer with higher quality settings
+    boltz2 multimer-msa a.a3m b.a3m c.a3m -c A,B,C --sampling-steps 400
+    
+    \b
+    # Limit paired sequences for faster prediction
+    boltz2 multimer-msa chain_A.a3m chain_B.a3m -c A,B --max-pairs 100
+    """
+    import asyncio
+    from .a3m_to_csv_converter import convert_a3m_to_multimer_csv, create_paired_msa_per_chain
+    from .models import Polymer, PredictionRequest
+    
+    # Parse chain IDs
+    chain_id_list = [c.strip() for c in chain_ids.split(',')]
+    
+    if len(chain_id_list) != len(a3m_files):
+        print_error(f"Number of chain IDs ({len(chain_id_list)}) must match number of A3M files ({len(a3m_files)})")
+        raise click.Abort()
+    
+    if len(a3m_files) < 2:
+        print_error("At least 2 A3M files are required for multimer prediction")
+        raise click.Abort()
+    
+    # Set default output path
+    if output is None:
+        output = "complex.cif"
+    
+    # Create mapping of chain IDs to file paths
+    a3m_file_dict = {chain_id: Path(filepath) for chain_id, filepath in zip(chain_id_list, a3m_files)}
+    
+    # Convert pairing_mode to use_tax_id
+    use_tax_id = None  # auto-detect (default)
+    if pairing_mode == 'taxid':
+        use_tax_id = True
+    elif pairing_mode == 'uniref':
+        use_tax_id = False
+    
+    console.print("\n[bold cyan]Boltz2 Multimer Prediction from A3M Files[/bold cyan]\n")
+    
+    # Show multi-endpoint info if enabled
+    if ctx.obj and ctx.obj.get('multi_endpoint'):
+        endpoints = [url.strip() for url in ctx.obj['base_url'].split(',')]
+        print_info(f"Multi-endpoint mode: {len(endpoints)} endpoints")
+        print_info(f"Load balance strategy: {ctx.obj.get('load_balance_strategy', 'least_loaded')}")
+    
+    print_info("Input A3M files:")
+    for chain_id, filepath in a3m_file_dict.items():
+        print(f"  Chain {chain_id}: {filepath}")
+    print_info(f"Output: {output}")
+    print_info(f"Pairing mode: {pairing_mode}")
+    print_info(f"Recycling steps: {recycling_steps}")
+    print_info(f"Sampling steps: {sampling_steps}")
+    print_info(f"Diffusion samples: {diffusion_samples}")
+    
+    async def run_prediction():
+        # Step 1: Convert A3M files to paired MSA
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Converting A3M files to paired MSA...", total=None)
+            
+            result = convert_a3m_to_multimer_csv(
+                a3m_files=a3m_file_dict,
+                pairing_strategy='greedy',
+                use_tax_id=use_tax_id,
+                max_pairs=max_pairs
+            )
+            
+            progress.update(task, description=f"✓ Paired {result.num_pairs} sequences")
+        
+        print_info(f"Paired sequences: {result.num_pairs}")
+        
+        # Save CSV files if requested
+        if save_csv:
+            output_path = Path(output)
+            csv_dir = output_path.parent
+            csv_dir.mkdir(parents=True, exist_ok=True)
+            base_name = output_path.stem
+            
+            for chain_id, csv_content in result.csv_per_chain.items():
+                csv_path = csv_dir / f"{base_name}_chain_{chain_id}.csv"
+                csv_path.write_text(csv_content)
+                print_info(f"CSV saved: {csv_path}")
+        
+        # Step 2: Create per-chain MSA structures
+        msa_per_chain = create_paired_msa_per_chain(result)
+        
+        # Step 3: Create polymers
+        polymers = []
+        for chain_id in chain_id_list:
+            polymer = Polymer(
+                id=chain_id,
+                molecule_type="protein",
+                sequence=result.query_sequences[chain_id],
+                msa=msa_per_chain[chain_id]
+            )
+            polymers.append(polymer)
+            print_info(f"Chain {chain_id}: {len(polymer.sequence)} residues")
+        
+        # Step 4: Create prediction request
+        request = PredictionRequest(
+            polymers=polymers,
+            recycling_steps=recycling_steps,
+            sampling_steps=sampling_steps,
+            diffusion_samples=diffusion_samples
+        )
+        
+        # Step 5: Get client (supports multi-endpoint mode)
+        client = create_client(ctx)
+        
+        # Check health (multi-endpoint checks all endpoints)
+        print_info("Checking server health...")
+        health = await client.health_check()
+        if hasattr(health, 'status'):
+            print_info(f"Server status: {health.status}")
+        else:
+            # Multi-endpoint returns list of health results
+            print_info(f"All endpoints healthy")
+        
+        # Submit prediction
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Running prediction...", total=None)
+            
+            response = await client.predict(request)
+            
+            progress.update(task, description="✓ Prediction complete")
+        
+        # Step 6: Save structure and outputs
+        if response.structures:
+            structure = response.structures[0]
+            cif_content = structure.structure if hasattr(structure, 'structure') else str(structure)
+            
+            output_path = Path(output)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(cif_content)
+            
+            atom_count = cif_content.count('ATOM ')
+            print_success(f"Structure saved to: {output_path}")
+            print_info(f"Total atoms: {atom_count}")
+            
+            # Save additional structures if multiple samples
+            if len(response.structures) > 1:
+                for i, struct in enumerate(response.structures[1:], start=2):
+                    extra_path = output_path.with_stem(f"{output_path.stem}_{i}")
+                    cif = struct.structure if hasattr(struct, 'structure') else str(struct)
+                    extra_path.write_text(cif)
+                    print_info(f"Additional structure: {extra_path}")
+            
+            # Save all outputs if requested
+            if save_all:
+                import json
+                
+                # Collect all scores and metrics
+                scores = {
+                    'confidence_scores': response.confidence_scores,
+                    'ptm_scores': response.ptm_scores,
+                    'iptm_scores': response.iptm_scores,
+                    'complex_plddt_scores': response.complex_plddt_scores,
+                    'complex_iplddt_scores': response.complex_iplddt_scores,
+                    'complex_pde_scores': response.complex_pde_scores,
+                    'complex_ipde_scores': response.complex_ipde_scores,
+                    'chains_ptm_scores': response.chains_ptm_scores,
+                    'pair_chains_iptm_scores': response.pair_chains_iptm_scores,
+                    'ligand_iptm_scores': response.ligand_iptm_scores,
+                    'protein_iptm_scores': response.protein_iptm_scores,
+                    'metrics': response.metrics,
+                }
+                
+                # Remove None values
+                scores = {k: v for k, v in scores.items() if v is not None}
+                
+                # Save scores as JSON
+                scores_path = output_path.with_suffix('.scores.json')
+                scores_path.write_text(json.dumps(scores, indent=2))
+                print_info(f"Scores saved to: {scores_path}")
+                
+                # Print key scores
+                if response.confidence_scores:
+                    print_info(f"Confidence: {response.confidence_scores[0]:.4f}")
+                if response.complex_plddt_scores:
+                    print_info(f"Complex pLDDT: {response.complex_plddt_scores[0]:.4f}")
+                if response.iptm_scores:
+                    print_info(f"Interface pTM: {response.iptm_scores[0]:.4f}")
+                if response.ptm_scores:
+                    print_info(f"pTM: {response.ptm_scores[0]:.4f}")
+        else:
+            print_error("No structures returned from prediction")
+            raise click.Abort()
+        
+        return response
+    
+    try:
+        asyncio.run(run_prediction())
+        print_success("\n✓ Multimer prediction complete!")
+    except Exception as e:
+        print_error(f"Prediction failed: {e}")
+        raise click.Abort()
+
+
 @cli.command()
 @click.pass_context
 def examples(ctx):
