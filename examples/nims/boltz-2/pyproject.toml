@@ -59,4 +59,5 @@ version = {attr = "boltz2_client.__version__"}
 include = ["boltz2_client*"]
 
 [tool.setuptools.package-data]
-boltz2_client = ["*.md", "*.txt"] 
+boltz2_client = ["*.md", "*.txt"]
+"boltz2_client.data" = ["*.txt"] 
