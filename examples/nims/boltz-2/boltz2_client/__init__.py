@@ -26,7 +26,7 @@ Example:
     >>> print(f"Confidence: {result.confidence_scores[0]:.3f}")
 """
 
-__version__ = "0.3.2"
+__version__ = "0.3.3"
 __author__ = "NVIDIA Corporation"
 __email__ = "bionemo-support@nvidia.com"
 

@@ -1192,6 +1192,11 @@ class A3MToCSVConverter:
         - Rows with the same 'key' across different chain CSVs are paired
         - This enables the model to identify co-evolved sequences from same organisms
         
+        When include_unpaired=True, also includes:
+        - Unpaired sequences in "block-diagonal" format where only one chain has
+          a sequence and others have gaps. This maximizes MSA depth while still
+          providing pairing information where available.
+        
         Args:
             msas: Dictionary mapping chain IDs to parsed A3MMSA objects
             output_path: Optional path to save the combined CSV file
@@ -1204,34 +1209,78 @@ class A3MToCSVConverter:
         # Find paired sequences
         pairs = self.pairing_strategy.find_pairs(msas)
         
+        # Track which sequences have been paired (to find unpaired ones later)
+        paired_sequence_ids: Dict[str, Set[str]] = {chain_id: set() for chain_id in chain_ids}
+        for pair in pairs:
+            for chain_id, seq in pair.items():
+                paired_sequence_ids[chain_id].add(seq.identifier)
+        
         if self.max_pairs:
             pairs = pairs[:self.max_pairs]
         
         logger.info(f"Found {len(pairs)} paired sequence sets across {len(chain_ids)} chains")
         
-        # Extract query sequences
+        # Extract query sequences and their lengths (for gap filling)
         query_sequences = {}
+        query_lengths = {}
         for chain_id, msa in msas.items():
             query = msa.get_query()
             if query:
-                query_sequences[chain_id] = self._clean_sequence(query.sequence)
+                clean_seq = self._clean_sequence(query.sequence)
+                query_sequences[chain_id] = clean_seq
+                query_lengths[chain_id] = len(clean_seq)
+        
+        # Collect unpaired sequences if requested
+        unpaired_sequences: Dict[str, List[A3MSequence]] = {chain_id: [] for chain_id in chain_ids}
+        num_unpaired = 0
+        
+        if self.include_unpaired:
+            for chain_id, msa in msas.items():
+                for seq in msa.sequences:
+                    if seq.is_query:
+                        continue
+                    if seq.identifier not in paired_sequence_ids[chain_id]:
+                        unpaired_sequences[chain_id].append(seq)
+                        num_unpaired += 1
+            
+            logger.info(f"Found {num_unpaired} unpaired sequences to include in block-diagonal format")
+        
+        # Calculate total rows: paired + unpaired (block-diagonal)
+        current_key = len(pairs)  # Start unpaired keys after paired ones
         
         # Build per-chain CSVs (for Boltz2 NIM API)
         csv_per_chain: Dict[str, str] = {}
         for chain_id in chain_ids:
             chain_lines = ["key,sequence"]
+            
+            # Add paired sequences
             for idx, pair in enumerate(pairs, start=1):
                 if chain_id in pair:
                     seq = self._clean_sequence(pair[chain_id].sequence)
                     chain_lines.append(f"{idx},{seq}")
                 else:
                     # Use gaps if sequence not found for this chain
-                    ref_msa = msas[chain_id]
-                    query = ref_msa.get_query()
-                    if query:
-                        gap_seq = '-' * len(self._clean_sequence(query.sequence))
-                        chain_lines.append(f"{idx},{gap_seq}")
+                    gap_seq = '-' * query_lengths.get(chain_id, 0)
+                    chain_lines.append(f"{idx},{gap_seq}")
+            
             csv_per_chain[chain_id] = '\n'.join(chain_lines)
+        
+        # Add unpaired sequences in block-diagonal format
+        if self.include_unpaired:
+            unpaired_key = current_key + 1
+            for source_chain_id in chain_ids:
+                for unpaired_seq in unpaired_sequences[source_chain_id]:
+                    # Add this unpaired sequence to all chain CSVs
+                    for chain_id in chain_ids:
+                        if chain_id == source_chain_id:
+                            # This chain has the sequence
+                            seq = self._clean_sequence(unpaired_seq.sequence)
+                            csv_per_chain[chain_id] += f"\n{unpaired_key},{seq}"
+                        else:
+                            # Other chains get gaps
+                            gap_seq = '-' * query_lengths.get(chain_id, 0)
+                            csv_per_chain[chain_id] += f"\n{unpaired_key},{gap_seq}"
+                    unpaired_key += 1
         
         # Build combined CSV (for reference/documentation)
         csv_lines = ["key,sequence"]
@@ -1242,14 +1291,30 @@ class A3MToCSVConverter:
                     seq = self._clean_sequence(pair[chain_id].sequence)
                     sequences.append(seq)
                 else:
-                    ref_msa = msas[chain_id]
-                    query = ref_msa.get_query()
-                    if query:
-                        sequences.append('-' * len(self._clean_sequence(query.sequence)))
+                    sequences.append('-' * query_lengths.get(chain_id, 0))
             concatenated = ':'.join(sequences)
             csv_lines.append(f"{idx},{concatenated}")
         
+        # Add unpaired sequences to combined CSV in block-diagonal format
+        if self.include_unpaired:
+            unpaired_key = current_key + 1
+            for source_chain_id in chain_ids:
+                for unpaired_seq in unpaired_sequences[source_chain_id]:
+                    sequences = []
+                    for chain_id in chain_ids:
+                        if chain_id == source_chain_id:
+                            seq = self._clean_sequence(unpaired_seq.sequence)
+                            sequences.append(seq)
+                        else:
+                            sequences.append('-' * query_lengths.get(chain_id, 0))
+                    concatenated = ':'.join(sequences)
+                    csv_lines.append(f"{unpaired_key},{concatenated}")
+                    unpaired_key += 1
+        
         csv_content = '\n'.join(csv_lines)
+        
+        total_rows = len(pairs) + (num_unpaired if self.include_unpaired else 0)
+        logger.info(f"Total MSA rows: {total_rows} ({len(pairs)} paired + {num_unpaired if self.include_unpaired else 0} unpaired)")
         
         # Save files if path provided
         output_paths_per_chain = None
@@ -1355,6 +1420,7 @@ def convert_a3m_to_multimer_csv(
     output_path: Optional[Path] = None,
     pairing_strategy: str = "greedy",
     use_tax_id: Optional[bool] = None,  # None = auto-detect (ColabFold default)
+    include_unpaired: bool = False,
     max_pairs: Optional[int] = None
 ) -> ConversionResult:
     """
@@ -1374,6 +1440,10 @@ def convert_a3m_to_multimer_csv(
                              This is how ColabFold behaves.
             - True: Force TaxID pairing (requires OX= or species codes in headers)
             - False: Force UniRef/organism ID pairing (works with standard ColabFold output)
+        include_unpaired: If True, include sequences without cross-chain matches in 
+                         "block-diagonal" format (one chain has sequence, others have gaps).
+                         This maximizes MSA depth while still providing pairing where available.
+                         Default: False (only paired sequences are included)
         max_pairs: Maximum number of pairs to include
         
     Returns:
@@ -1388,6 +1458,12 @@ def convert_a3m_to_multimer_csv(
         ...     # use_tax_id=None means auto-detect (default)
         ... )
         >>> print(f"Created {result.num_pairs} paired sequences")
+        
+        >>> # Include unpaired sequences for maximum MSA depth
+        >>> result = convert_a3m_to_multimer_csv(
+        ...     a3m_files={'A': Path('chain_A.a3m'), 'B': Path('chain_B.a3m')},
+        ...     include_unpaired=True  # Block-diagonal format
+        ... )
     
     ColabFold Compatibility:
         Standard ColabFold A3M files use UniRef100 cluster IDs without TaxID information.
@@ -1417,6 +1493,7 @@ def convert_a3m_to_multimer_csv(
     
     converter = A3MToCSVConverter(
         pairing_strategy=strategy,
+        include_unpaired=include_unpaired,
         max_pairs=max_pairs
     )
     

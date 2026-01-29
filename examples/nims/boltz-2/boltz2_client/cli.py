@@ -1534,10 +1534,12 @@ def screen(ctx, target_sequence, compounds_file, target_name, output_dir, no_aff
 @click.option('--pairing-mode', type=click.Choice(['auto', 'taxid', 'uniref']),
               default='auto',
               help='Pairing identifier mode: auto (default, like ColabFold), taxid, or uniref')
+@click.option('--include-unpaired', is_flag=True, default=False,
+              help='Include unpaired sequences in block-diagonal format (maximizes MSA depth)')
 @click.pass_context
 def convert_msa_command(ctx, a3m_files: Tuple[str, ...], chain_ids: str, 
                         output: str, max_pairs: Optional[int], 
-                        pairing_strategy: str, pairing_mode: str):
+                        pairing_strategy: str, pairing_mode: str, include_unpaired: bool):
     """
     Convert ColabFold A3M monomer MSA files to Boltz2 multimer CSV format.
     
@@ -1607,6 +1609,8 @@ def convert_msa_command(ctx, a3m_files: Tuple[str, ...], chain_ids: str,
     print_info(f"Output: {output}")
     print_info(f"Pairing strategy: {pairing_strategy}")
     print_info(f"Pairing mode: {pairing_mode}")
+    if include_unpaired:
+        print_info("Include unpaired: Yes (block-diagonal format)")
     if max_pairs:
         print_info(f"Max pairs: {max_pairs}")
     
@@ -1624,6 +1628,7 @@ def convert_msa_command(ctx, a3m_files: Tuple[str, ...], chain_ids: str,
                 output_path=Path(output),
                 pairing_strategy=pairing_strategy,
                 use_tax_id=use_tax_id,
+                include_unpaired=include_unpaired,
                 max_pairs=max_pairs
             )
             
@@ -1666,6 +1671,8 @@ def convert_msa_command(ctx, a3m_files: Tuple[str, ...], chain_ids: str,
 @click.option('--pairing-mode', type=click.Choice(['auto', 'taxid', 'uniref']),
               default='auto',
               help='Pairing identifier mode: auto (default), taxid, or uniref')
+@click.option('--include-unpaired', is_flag=True, default=False,
+              help='Include unpaired sequences in block-diagonal format (maximizes MSA depth)')
 @click.option('--recycling-steps', type=int, default=3,
               help='Number of recycling steps (default: 3)')
 @click.option('--sampling-steps', type=int, default=200,
@@ -1675,7 +1682,7 @@ def convert_msa_command(ctx, a3m_files: Tuple[str, ...], chain_ids: str,
 @click.pass_context
 def multimer_msa_command(ctx, a3m_files: Tuple[str, ...], chain_ids: str, 
                          output: Optional[str], save_csv: bool, save_all: bool,
-                         max_pairs: Optional[int], pairing_mode: str, 
+                         max_pairs: Optional[int], pairing_mode: str, include_unpaired: bool,
                          recycling_steps: int, sampling_steps: int, 
                          diffusion_samples: int):
     """
@@ -1775,10 +1782,12 @@ def multimer_msa_command(ctx, a3m_files: Tuple[str, ...], chain_ids: str,
                 a3m_files=a3m_file_dict,
                 pairing_strategy='greedy',
                 use_tax_id=use_tax_id,
+                include_unpaired=include_unpaired,
                 max_pairs=max_pairs
             )
             
-            progress.update(task, description=f"✓ Paired {result.num_pairs} sequences")
+            unpaired_msg = " (+ unpaired)" if include_unpaired else ""
+            progress.update(task, description=f"✓ Paired {result.num_pairs} sequences{unpaired_msg}")
         
         print_info(f"Paired sequences: {result.num_pairs}")
         
