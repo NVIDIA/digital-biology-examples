@@ -26,7 +26,7 @@ Example:
     >>> print(f"Confidence: {result.confidence_scores[0]:.3f}")
 """
 
-__version__ = "0.3.3"
+__version__ = "0.4.0"
 __author__ = "NVIDIA Corporation"
 __email__ = "bionemo-support@nvidia.com"
 
@@ -43,6 +43,8 @@ from .models import (
     AlignmentFormat,
     HealthStatus,
     ServiceMetadata,
+    StructuralTemplate,
+    Modification,
 )
 from .models_affinity import AffinityPrediction
 from .exceptions import (
@@ -81,6 +83,11 @@ from .a3m_to_csv_converter import (
     create_paired_msa_per_chain,
     save_prediction_outputs,
     get_prediction_summary,
+    save_pae_matrix,
+    save_pde_matrix,
+    get_pae_summary,
+    convert_cif_to_pdb,
+    convert_pdb_to_cif,
     ConversionResult,
     GreedyPairingStrategy,
     CompletePairingStrategy,
@@ -130,6 +137,8 @@ __all__ = [
     "HealthStatus",
     "ServiceMetadata",
     "AffinityPrediction",
+    "StructuralTemplate",
+    "Modification",
     
     # Exceptions
     "Boltz2Error",
@@ -167,6 +176,11 @@ __all__ = [
     "create_paired_msa_per_chain",
     "save_prediction_outputs",
     "get_prediction_summary",
+    "save_pae_matrix",
+    "save_pde_matrix",
+    "get_pae_summary",
+    "convert_cif_to_pdb",
+    "convert_pdb_to_cif",
     "ConversionResult",
     "GreedyPairingStrategy",
     "CompletePairingStrategy",

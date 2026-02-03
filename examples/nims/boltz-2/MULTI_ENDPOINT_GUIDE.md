@@ -90,10 +90,10 @@ endpoints = [
     ),
 ]
 
-# Create multi-endpoint client
+# Create multi-endpoint client (default strategy: LEAST_LOADED)
 multi_client = MultiEndpointClient(
     endpoints=endpoints,
-    strategy=LoadBalanceStrategy.LEAST_LOADED,
+    # strategy=LoadBalanceStrategy.LEAST_LOADED,  # This is the default
     health_check_interval=30.0,  # Check health every 30 seconds
 )
 
@@ -103,20 +103,20 @@ vs = VirtualScreening(client=multi_client)
 
 ### Running Multiple Local NIM Instances
 
-To run multiple Boltz-2 NIM instances on different ports:
+To run multiple Boltz-2 NIM v1.5 instances on different ports:
 
 ```bash
 # Terminal 1 - First instance on port 8000
-docker run --rm --gpus device=0 -p 8000:8000 \
-  nvcr.io/nim/mit/boltz-2:latest
+docker run --rm --gpus device=0 --shm-size=16G -p 8000:8000 \
+  -e NGC_API_KEY nvcr.io/nim/mit/boltz2:1.5.0
 
 # Terminal 2 - Second instance on port 8001  
-docker run --rm --gpus device=1 -p 8001:8000 \
-  nvcr.io/nim/mit/boltz-2:latest
+docker run --rm --gpus device=1 --shm-size=16G -p 8001:8000 \
+  -e NGC_API_KEY nvcr.io/nim/mit/boltz2:1.5.0
 
 # Terminal 3 - Third instance on port 8002
-docker run --rm --gpus device=2 -p 8002:8000 \
-  nvcr.io/nim/mit/boltz-2:latest
+docker run --rm --gpus device=2 --shm-size=16G -p 8002:8000 \
+  -e NGC_API_KEY nvcr.io/nim/mit/boltz2:1.5.0
 ```
 
 ## 🧬 **Complete Functionality Examples**
@@ -383,10 +383,11 @@ multi_client.print_status()
 
 ## Performance Tips
 
-1. **Use Least Loaded Strategy**: Generally provides best throughput
+1. **Least Loaded is Default**: The `LEAST_LOADED` strategy is now the default (generally provides best throughput)
 2. **Set Appropriate Weights**: Assign higher weights to more powerful servers
 3. **Monitor Health**: Adjust health check intervals based on your needs
 4. **Batch Size**: Consider using smaller batch sizes to distribute work better
+5. **v1.5 Limits**: Use up to `recycling_steps=10` and `diffusion_samples=25` for higher quality
 
 ## Deployment Patterns
 

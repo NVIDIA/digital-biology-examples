@@ -23,7 +23,7 @@ Copyright (c) 2025, NVIDIA CORPORATION. All rights reserved.
 import re
 import csv
 import logging
-from typing import Dict, List, Optional, Tuple, Set, NamedTuple
+from typing import Dict, List, Optional, Tuple, Set, NamedTuple, Union
 from pathlib import Path
 from dataclasses import dataclass, field
 from collections import defaultdict
@@ -1735,4 +1735,278 @@ def get_prediction_summary(response) -> Dict:
         summary['prediction_time_seconds'] = response.metrics['total_time_seconds']
     
     return summary
+
+
+def save_pae_matrix(
+    pae: List[List[List[float]]],
+    output_path: Union[str, Path],
+    format: str = "json"
+) -> Path:
+    """
+    Save PAE (Predicted Aligned Error) matrix to file.
+    
+    Args:
+        pae: PAE matrix from PredictionResponse.pae
+             Shape: [num_models, num_residues, num_residues]
+        output_path: Path to save the file
+        format: Output format - "json" or "npy" (numpy)
+        
+    Returns:
+        Path to saved file
+        
+    Example:
+        >>> if response.pae:
+        ...     save_pae_matrix(response.pae, "structure.pae.json")
+    """
+    import json
+    
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    if format == "json":
+        with open(output_path, "w") as f:
+            json.dump({"pae": pae}, f, indent=2)
+    elif format == "npy":
+        try:
+            import numpy as np
+            np.save(output_path, np.array(pae))
+        except ImportError:
+            raise ImportError("numpy is required for .npy format. Install with: pip install numpy")
+    else:
+        raise ValueError(f"Unsupported format: {format}. Use 'json' or 'npy'")
+    
+    return output_path
+
+
+def save_pde_matrix(
+    pde: List[List[List[float]]],
+    output_path: Union[str, Path],
+    format: str = "json"
+) -> Path:
+    """
+    Save PDE (Predicted Distance Error) matrix to file.
+    
+    Args:
+        pde: PDE matrix from PredictionResponse.pde
+             Shape: [num_models, num_residues, num_residues]
+        output_path: Path to save the file
+        format: Output format - "json" or "npy" (numpy)
+        
+    Returns:
+        Path to saved file
+        
+    Example:
+        >>> if response.pde:
+        ...     save_pde_matrix(response.pde, "structure.pde.json")
+    """
+    import json
+    
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    if format == "json":
+        with open(output_path, "w") as f:
+            json.dump({"pde": pde}, f, indent=2)
+    elif format == "npy":
+        try:
+            import numpy as np
+            np.save(output_path, np.array(pde))
+        except ImportError:
+            raise ImportError("numpy is required for .npy format. Install with: pip install numpy")
+    else:
+        raise ValueError(f"Unsupported format: {format}. Use 'json' or 'npy'")
+    
+    return output_path
+
+
+def get_pae_summary(pae: List[List[List[float]]]) -> Dict:
+    """
+    Get summary statistics for PAE matrix.
+    
+    Args:
+        pae: PAE matrix from PredictionResponse.pae
+        
+    Returns:
+        Dictionary with shape, mean, min, max values
+        
+    Example:
+        >>> summary = get_pae_summary(response.pae)
+        >>> print(f"Mean PAE: {summary['mean']:.2f} Å")
+    """
+    if not pae:
+        return {}
+    
+    # Flatten to get statistics
+    all_values = []
+    for model_pae in pae:
+        for row in model_pae:
+            all_values.extend(row)
+    
+    return {
+        "shape": f"{len(pae)}x{len(pae[0])}x{len(pae[0][0])}",
+        "num_models": len(pae),
+        "num_residues": len(pae[0]),
+        "mean": sum(all_values) / len(all_values),
+        "min": min(all_values),
+        "max": max(all_values),
+    }
+
+
+def convert_cif_to_pdb(
+    cif_input: Union[str, Path],
+    pdb_output: Union[str, Path],
+    structure_id: str = "PRED"
+) -> Path:
+    """
+    Convert mmCIF file to PDB format.
+    
+    Uses gemmi (preferred, faster) or BioPython as fallback.
+    
+    Args:
+        cif_input: Path to input CIF file or CIF content as string
+        pdb_output: Path for output PDB file
+        structure_id: Structure ID to use in PDB file (default: "PRED")
+        
+    Returns:
+        Path to the saved PDB file
+        
+    Example:
+        >>> convert_cif_to_pdb("structure.cif", "structure.pdb")
+        >>> # Or from string content
+        >>> convert_cif_to_pdb(cif_content, "structure.pdb")
+        
+    Note:
+        Requires either gemmi or BioPython to be installed:
+        - pip install gemmi  (recommended, faster)
+        - pip install biopython
+    """
+    import tempfile
+    
+    pdb_output = Path(pdb_output)
+    pdb_output.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Check if input is a file path or string content
+    cif_path = Path(cif_input) if isinstance(cif_input, (str, Path)) and Path(cif_input).exists() else None
+    
+    # If input is string content, write to temp file
+    if cif_path is None:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.cif', delete=False) as f:
+            f.write(str(cif_input))
+            cif_path = Path(f.name)
+        cleanup_temp = True
+    else:
+        cif_path = Path(cif_input)
+        cleanup_temp = False
+    
+    try:
+        # Try gemmi first (faster)
+        try:
+            import gemmi
+            structure = gemmi.read_structure(str(cif_path))
+            structure.write_pdb(str(pdb_output))
+            return pdb_output
+        except ImportError:
+            pass
+        
+        # Fallback to BioPython
+        try:
+            from Bio.PDB import MMCIFParser, PDBIO
+            import warnings
+            
+            # Suppress BioPython warnings about incomplete structures
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                
+                parser = MMCIFParser(QUIET=True)
+                structure = parser.get_structure(structure_id, str(cif_path))
+                
+                io = PDBIO()
+                io.set_structure(structure)
+                io.save(str(pdb_output))
+                
+            return pdb_output
+        except ImportError:
+            raise ImportError(
+                "CIF to PDB conversion requires either gemmi or BioPython. "
+                "Install with: pip install gemmi  (recommended) or pip install biopython"
+            )
+    finally:
+        # Clean up temp file if created
+        if cleanup_temp and cif_path.exists():
+            cif_path.unlink()
+
+
+def convert_pdb_to_cif(
+    pdb_input: Union[str, Path],
+    cif_output: Union[str, Path],
+    structure_id: str = "PRED"
+) -> Path:
+    """
+    Convert PDB file to mmCIF format.
+    
+    Uses gemmi (preferred, faster) or BioPython as fallback.
+    
+    Args:
+        pdb_input: Path to input PDB file or PDB content as string
+        cif_output: Path for output CIF file
+        structure_id: Structure ID to use (default: "PRED")
+        
+    Returns:
+        Path to the saved CIF file
+        
+    Example:
+        >>> convert_pdb_to_cif("structure.pdb", "structure.cif")
+    """
+    import tempfile
+    
+    cif_output = Path(cif_output)
+    cif_output.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Check if input is a file path or string content
+    pdb_path = Path(pdb_input) if isinstance(pdb_input, (str, Path)) and Path(pdb_input).exists() else None
+    
+    # If input is string content, write to temp file
+    if pdb_path is None:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.pdb', delete=False) as f:
+            f.write(str(pdb_input))
+            pdb_path = Path(f.name)
+        cleanup_temp = True
+    else:
+        pdb_path = Path(pdb_input)
+        cleanup_temp = False
+    
+    try:
+        # Try gemmi first (faster)
+        try:
+            import gemmi
+            structure = gemmi.read_structure(str(pdb_path))
+            structure.write_minimal_cif(str(cif_output))
+            return cif_output
+        except ImportError:
+            pass
+        
+        # Fallback to BioPython
+        try:
+            from Bio.PDB import PDBParser, MMCIFIO
+            import warnings
+            
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                
+                parser = PDBParser(QUIET=True)
+                structure = parser.get_structure(structure_id, str(pdb_path))
+                
+                io = MMCIFIO()
+                io.set_structure(structure)
+                io.save(str(cif_output))
+                
+            return cif_output
+        except ImportError:
+            raise ImportError(
+                "PDB to CIF conversion requires either gemmi or BioPython. "
+                "Install with: pip install gemmi  (recommended) or pip install biopython"
+            )
+    finally:
+        if cleanup_temp and pdb_path.exists():
+            pdb_path.unlink()
 

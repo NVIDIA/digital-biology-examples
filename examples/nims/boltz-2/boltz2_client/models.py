@@ -19,17 +19,23 @@ from .models_affinity import AffinityPrediction
 
 
 class Modification(BaseModel):
-    """Represents a molecular modification."""
-    type: str = Field(..., description="Type of modification")
-    position: int = Field(..., description="Position of modification")
-    details: Optional[Dict[str, Any]] = Field(None, description="Additional modification details")
+    """Represents a chemical modification to a polymer chain."""
+    ccd: str = Field(..., description="The Chemical Component Dictionary (CCD) ID of the modification (1-5 uppercase letters/numbers)")
+    position: int = Field(..., gt=0, description="The 1-based index of the residue to modify")
+    
+    @validator('ccd')
+    def validate_ccd(cls, v):
+        """Validate CCD code format."""
+        if not re.match(r'^[A-Z0-9]{1,5}$', v):
+            raise ValueError("CCD code must be 1-5 uppercase letters/numbers")
+        return v
 
 
 class AlignmentFileRecord(BaseModel):
     """Represents a single alignment file record."""
     alignment: str = Field(..., description="Raw alignment file content as string")
     format: Literal["sto", "a3m", "csv", "fasta"] = Field(..., description="Alignment file format")
-    rank: int = Field(-1, description="Integer rank to define ordering of alignments")
+    rank: Optional[int] = Field(-1, description="Integer rank to define ordering of alignments")
     
     @validator('alignment')
     def validate_alignment_content(cls, v):
@@ -39,15 +45,42 @@ class AlignmentFileRecord(BaseModel):
         return v
 
 
+class StructuralTemplate(BaseModel):
+    """A structural template to guide protein structure prediction."""
+    structure: str = Field(..., min_length=1, description="The template structure content in CIF or PDB format")
+    format: Literal["cif", "pdb"] = Field("cif", description="Format of the structure (cif or pdb)")
+    name: Optional[str] = Field(None, description="Optional name for the template (max 64 chars, alphanumeric with -_)")
+    chain_id: Optional[str] = Field(None, description="Optional chain ID to use from the template structure (1-4 alphanumeric)")
+    
+    @validator('name')
+    def validate_name(cls, v):
+        """Validate template name format."""
+        if v is not None:
+            if len(v) > 64:
+                raise ValueError("Template name must be 64 characters or less")
+            if not re.match(r'^[A-Za-z0-9_-]+$', v):
+                raise ValueError("Template name must contain only alphanumeric characters, underscores, and hyphens")
+        return v
+    
+    @validator('chain_id')
+    def validate_chain_id(cls, v):
+        """Validate chain ID format."""
+        if v is not None:
+            if not re.match(r'^[A-Za-z0-9]{1,4}$', v):
+                raise ValueError("Chain ID must be 1-4 alphanumeric characters")
+        return v
+
+
 class Polymer(BaseModel):
     """Represents a polymer (protein, DNA, or RNA) in the prediction request."""
     
-    id: str = Field(..., description="Unique identifier for the polymer (A-Z or 4 alphanumeric chars)")
+    id: Optional[str] = Field(None, description="Unique identifier for the polymer (1-4 alphanumeric chars)")
     molecule_type: Literal["protein", "dna", "rna"] = Field(..., description="Type of molecule")
-    sequence: str = Field(..., description="Sequence string")
-    cyclic: bool = Field(False, description="Whether the polymer is cyclic")
-    modifications: List[Modification] = Field(default_factory=list, description="List of modifications")
+    sequence: str = Field(..., max_length=4096, description="Sequence string (max 4096 characters)")
+    cyclic: Optional[bool] = Field(False, description="Whether the polymer is cyclic")
+    modifications: Optional[List[Modification]] = Field(default_factory=list, description="List of modifications")
     msa: Optional[Dict[str, Dict[str, AlignmentFileRecord]]] = Field(None, description="A Dictionary [database_name -> [format -> AlignmentFileRecord]] containing alignments")
+    structural_templates: Optional[List[StructuralTemplate]] = Field(None, description="Structural templates to guide prediction (max 4, protein only)")
     
     @validator('sequence')
     def validate_sequence(cls, v, values):
@@ -77,13 +110,23 @@ class Polymer(BaseModel):
     
     @validator('id')
     def validate_id(cls, v):
-        """Validate polymer ID format (single letter A-Z or 4 alphanumeric chars)."""
-        if re.match(r'^[A-Z]$', v):
-            return v  # Single letter A-Z
-        elif re.match(r'^[A-Za-z0-9]{4}$', v):
-            return v  # 4 alphanumeric characters
-        else:
-            raise ValueError("Polymer ID must be either a single letter (A-Z) or 4 alphanumeric characters")
+        """Validate polymer ID format (1-4 alphanumeric characters)."""
+        if v is not None:
+            if not re.match(r'^[A-Za-z0-9]{1,4}$', v):
+                raise ValueError("Polymer ID must be 1-4 alphanumeric characters")
+        return v
+    
+    @validator('structural_templates')
+    def validate_structural_templates(cls, v, values):
+        """Validate structural templates."""
+        if v is not None:
+            if len(v) > 4:
+                raise ValueError("Maximum 4 structural templates allowed")
+            # Only allowed for proteins
+            molecule_type = values.get('molecule_type')
+            if molecule_type and molecule_type != "protein":
+                raise ValueError("Structural templates are only allowed for protein molecules")
+        return v
 
 
 class Ligand(BaseModel):
@@ -112,9 +155,9 @@ class Ligand(BaseModel):
         if v is not None:
             if not v.strip():
                 raise ValueError("CCD code cannot be empty")
-            # CCD codes are typically 3-4 character alphanumeric codes
-            if not re.match(r'^[A-Za-z0-9]{2,4}$', v.strip()):
-                raise ValueError("CCD code must be 2-4 alphanumeric characters")
+            # CCD codes are 1-5 uppercase letters/numbers
+            if not re.match(r'^[A-Z0-9]{1,5}$', v.strip().upper()):
+                raise ValueError("CCD code must be 1-5 uppercase letters/numbers")
             return v.strip().upper()
         return v
     
@@ -182,10 +225,10 @@ class PredictionRequest(BaseModel):
     """Complete prediction request model with all available Boltz-2 parameters."""
     
     # Required parameters
-    polymers: List[Polymer] = Field(..., description="List of polymers (DNA, RNA, or Protein) - max 5, min 1")
+    polymers: List[Polymer] = Field(..., description="List of polymers (DNA, RNA, or Protein) - max 12, min 1")
     
     # Optional molecular components
-    ligands: Optional[List[Ligand]] = Field(None, description="List of ligands - max 5, min 0")
+    ligands: Optional[List[Ligand]] = Field(None, description="List of ligands - max 20, min 0")
     
     # Constraints
     constraints: Optional[List[Union[PocketConstraint, BondConstraint]]] = Field(
@@ -194,16 +237,16 @@ class PredictionRequest(BaseModel):
     
     # Diffusion and sampling parameters
     recycling_steps: Optional[int] = Field(
-        3, ge=1, le=6, 
-        description="The number of recycling steps to use for prediction (1-6, default: 3)"
+        3, ge=1, le=10, 
+        description="The number of recycling steps to use for prediction (1-10, default: 3)"
     )
     sampling_steps: Optional[int] = Field(
         50, ge=10, le=1000,
         description="The number of sampling steps to use for prediction (10-1000, default: 50)"
     )
     diffusion_samples: Optional[int] = Field(
-        1, ge=1, le=5,
-        description="The number of diffusion samples to use for prediction (1-5, default: 1)"
+        1, ge=1, le=25,
+        description="The number of diffusion samples to use for prediction (1-25, default: 1)"
     )
     step_scale: Optional[float] = Field(
         1.638, ge=0.5, le=5.0,
@@ -238,11 +281,21 @@ class PredictionRequest(BaseModel):
         description="Whether to add Molecular Weight correction to the affinity prediction (default: False)"
     )
     
+    # PAE/PDE output parameters (v1.5+)
+    write_full_pae: Optional[bool] = Field(
+        False,
+        description="Whether to save the full PAE (Predicted Aligned Error) matrix in the response (default: False)"
+    )
+    write_full_pde: Optional[bool] = Field(
+        False,
+        description="Whether to save the full PDE (Predicted Distance Error) matrix in the response (default: False)"
+    )
+    
     @validator('polymers')
     def validate_polymers_count(cls, v):
         """Validate polymer count."""
-        if len(v) > 5:
-            raise ValueError("Maximum 5 polymers allowed")
+        if len(v) > 12:
+            raise ValueError("Maximum 12 polymers allowed")
         if len(v) == 0:
             raise ValueError("At least 1 polymer required")
         return v
@@ -251,8 +304,8 @@ class PredictionRequest(BaseModel):
     def validate_ligands_count(cls, v):
         """Validate ligand count and affinity prediction constraints."""
         if v is not None:
-            if len(v) > 5:
-                raise ValueError("Maximum 5 ligands allowed")
+            if len(v) > 20:
+                raise ValueError("Maximum 20 ligands allowed")
             
             # Check that only one ligand has predict_affinity=True
             affinity_ligands = [lig for lig in v if getattr(lig, 'predict_affinity', False)]
@@ -305,6 +358,16 @@ class PredictionResponse(BaseModel):
     complex_ipde_scores: Optional[List[float]] = Field(None, description="Average PDE score when aggregating at interfaces")
     chains_ptm_scores: Optional[List[float]] = Field(None, description="Predicted TM score within each chain")
     pair_chains_iptm_scores: Optional[List[Dict[str, Any]]] = Field(None, description="Predicted TM score between each pair of chains")
+    
+    # Full error matrices (v1.5+)
+    pae: Optional[List[List[List[float]]]] = Field(
+        None, 
+        description="Full PAE (Predicted Aligned Error) matrix. Shape: [num_models, num_residues, num_residues]"
+    )
+    pde: Optional[List[List[List[float]]]] = Field(
+        None, 
+        description="Full PDE (Predicted Distance Error) matrix. Shape: [num_models, num_residues, num_residues]"
+    )
     
     @validator('structures')
     def validate_structures(cls, v):

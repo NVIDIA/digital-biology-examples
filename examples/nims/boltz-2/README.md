@@ -10,6 +10,7 @@ A comprehensive Python client for NVIDIA's Boltz-2 biomolecular structure predic
 
 ## 🚀 **Features**
 
+- ✅ **Boltz2 NIM v1.5 Support** - Compatible with the latest NVIDIA Boltz2 NIM
 - ✅ **Full API Coverage** - Complete Boltz-2 API support
 - ✅ **Async & Sync Clients** - Choose your preferred programming style
 - ✅ **Rich CLI Interface** - Beautiful command-line tools with progress bars
@@ -20,8 +21,11 @@ A comprehensive Python client for NVIDIA's Boltz-2 biomolecular structure predic
 - ✅ **Affinity Prediction** - Predict binding affinity (IC50) for protein-ligand complexes
 - ✅ **Virtual Screening** - High-level API for drug discovery campaigns
 - ✅ **MSA Search Integration** - GPU-accelerated MSA generation with NVIDIA MSA Search NIM
-- ✅ **A3M to Multimer MSA** - Convert ColabFold A3M files to paired multimer format (NEW)
-- ✅ **Multi-Endpoint Load Balancing** - Distribute predictions across multiple NIMs
+- ✅ **A3M to Multimer MSA** - Convert ColabFold A3M files to paired multimer format
+- ✅ **Multi-Endpoint Load Balancing** - Distribute predictions across multiple NIMs (default: least-loaded)
+- ✅ **PAE/PDE Matrix Output** - Full Predicted Aligned Error and Distance Error matrices
+- ✅ **PDB Output Format** - Export structures as PDB in addition to mmCIF
+- ✅ **Structural Templates** - Template-guided structure prediction
 - ✅ **Comprehensive Examples** - Ready-to-use code samples
 
 ## 📦 **Installation**
@@ -108,12 +112,19 @@ boltz2 msa-ligand "PROTEIN_SEQUENCE" --smiles "LIGAND_SMILES" --predict-affinity
 # Convert ColabFold A3M files to paired multimer CSV
 boltz2 convert-msa chain_A.a3m chain_B.a3m -c A,B -o paired.csv
 
-# One-command multimer prediction from A3M files (NEW)
+# One-command multimer prediction from A3M files
 boltz2 multimer-msa chain_A.a3m chain_B.a3m -c A,B -o complex.cif
 
-# Multi-endpoint multimer prediction
+# With PAE matrix output and PDB format
+boltz2 multimer-msa chain_A.a3m chain_B.a3m -c A,B -o complex.pdb \
+    --output-format pdb --write-full-pae --save-all
+
+# High-quality prediction with v1.5 limits (up to 10 recycling, 25 diffusion samples)
+boltz2 protein "MKTVRQ..." --recycling-steps 10 --diffusion-samples 25
+
+# Multi-endpoint multimer prediction (default: least-loaded balancing)
 boltz2 --multi-endpoint --base-url "http://gpu1:8000,http://gpu2:8000" \
-    multimer-msa chain_A.a3m chain_B.a3m -c A,B -o complex.cif
+    multimer-msa chain_A.a3m chain_B.a3m -c A,B -o complex.cif --save-all
 ```
 
 ### Affinity Prediction
@@ -238,11 +249,12 @@ boltz2 --multi-endpoint \
     multimer-msa chain_A.a3m chain_B.a3m -c A,B -o complex.cif --save-all
 ```
 
-**Output files with `--save-all --save-csv`:**
+**Output files with `--save-all --save-csv --write-full-pae`:**
 ```
 output/
-├── complex.cif              # 3D structure (mmCIF)
-├── complex.scores.json      # Confidence scores, pLDDT, pTM, metrics
+├── complex.cif              # 3D structure (mmCIF) or .pdb with --output-format pdb
+├── complex.scores.json      # Confidence scores, pLDDT, pTM, ipTM, metrics
+├── complex.pae.json         # PAE matrix (with --write-full-pae)
 ├── complex_chain_A.csv      # Paired MSA for chain A
 └── complex_chain_B.csv      # Paired MSA for chain B
 ```
@@ -297,21 +309,21 @@ result = quick_screen(
 print(result.get_top_hits(n=5))
 ```
 
-### Multi-Endpoint Virtual Screening (NEW)
+### Multi-Endpoint Virtual Screening
 
 Parallelize screening across multiple Boltz-2 NIM endpoints for better throughput:
 
 ```python
 from boltz2_client import MultiEndpointClient, LoadBalanceStrategy, VirtualScreening
 
-# Configure multiple endpoints
+# Configure multiple endpoints (default strategy: LEAST_LOADED)
 multi_client = MultiEndpointClient(
     endpoints=[
         "http://localhost:8000",
         "http://localhost:8001",
         "http://localhost:8002",
-    ],
-    strategy=LoadBalanceStrategy.LEAST_LOADED
+    ]
+    # strategy=LoadBalanceStrategy.LEAST_LOADED  # This is the default
 )
 
 # Use with virtual screening
@@ -407,10 +419,11 @@ chmod -R 777 $LOCAL_NIM_CACHE
 ```bash
 docker run -it \
     --runtime=nvidia \
+    --shm-size=16G \
     -p 8000:8000 \
     -e NGC_API_KEY \
     -v "$LOCAL_NIM_CACHE":/opt/nim/.cache \
-    nvcr.io/nim/mit/boltz2:1.0.0
+    nvcr.io/nim/mit/boltz2:1.5.0
 ```
 
 #### Option B: Use Specific GPU (e.g., GPU 0)
@@ -418,10 +431,11 @@ docker run -it \
 docker run -it \
     --runtime=nvidia \
     --gpus='"device=0"' \
+    --shm-size=16G \
     -p 8000:8000 \
     -e NGC_API_KEY \
     -v "$LOCAL_NIM_CACHE":/opt/nim/.cache \
-    nvcr.io/nim/mit/boltz2:1.0.0
+    nvcr.io/nim/mit/boltz2:1.5.0
 ```
 
 ### Step 5: Verify Installation
@@ -543,6 +557,66 @@ result = await client.predict_with_advanced_parameters(
     sampling_steps=200,
     diffusion_samples=1
 )
+```
+
+### Boltz2 NIM v1.5 Features
+
+The client supports all v1.5 parameters and limits:
+
+```python
+from boltz2_client import Boltz2Client, PredictionRequest, Polymer
+
+client = Boltz2Client(base_url="http://localhost:8000")
+
+# High-quality prediction with v1.5 limits
+request = PredictionRequest(
+    polymers=[Polymer(id="A", molecule_type="protein", sequence="MKTVRQ...")],
+    recycling_steps=10,      # Up to 10 (was 6 in v1.3)
+    diffusion_samples=25,    # Up to 25 (was 5 in v1.3)
+    write_full_pae=True,     # Output full PAE matrix
+    write_full_pde=True,     # Output full PDE matrix
+)
+
+result = await client.predict(request)
+
+# Access PAE/PDE matrices
+if result.pae:
+    print(f"PAE shape: {len(result.pae)}x{len(result.pae[0])}x{len(result.pae[0][0])}")
+```
+
+**v1.5 Parameter Limits:**
+| Parameter | v1.3 Limit | v1.5 Limit |
+|-----------|------------|------------|
+| `recycling_steps` | 1-6 | 1-10 |
+| `diffusion_samples` | 1-5 | 1-25 |
+| `polymers` | 5 | 12 |
+| `ligands` | 5 | 20 |
+
+### PAE/PDE Matrix Output
+
+```python
+from boltz2_client import save_pae_matrix, get_pae_summary
+
+# Save PAE matrix to file
+save_pae_matrix(result.pae, "output.pae.json")
+save_pae_matrix(result.pae, "output.pae.npy", format="npy")  # NumPy format
+
+# Get summary statistics
+summary = get_pae_summary(result.pae)
+print(f"Mean PAE: {summary['mean_pae']:.2f}")
+print(f"Quality: {summary['quality']}")  # Very High/High/Medium/Low
+```
+
+### PDB Output Format
+
+```python
+from boltz2_client import convert_cif_to_pdb
+
+# Convert mmCIF to PDB format
+convert_cif_to_pdb("structure.cif", "structure.pdb")
+
+# CLI: Use --output-format pdb
+# boltz2 protein "SEQUENCE" -o output.pdb --output-format pdb
 ```
 
 ### 🆕 Affinity Prediction

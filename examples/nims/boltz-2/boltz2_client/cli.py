@@ -260,22 +260,29 @@ def metadata(ctx):
 @cli.command()
 @click.argument('sequence')
 @click.option('--polymer-id', default='A', help='Polymer identifier (default: A)')
-@click.option('--recycling-steps', default=3, type=click.IntRange(1, 6), 
-              help='Number of recycling steps (1-6, default: 3)')
+@click.option('--recycling-steps', default=3, type=click.IntRange(1, 10), 
+              help='Number of recycling steps (1-10, default: 3)')
 @click.option('--sampling-steps', default=50, type=click.IntRange(10, 1000),
               help='Number of sampling steps (10-1000, default: 50)')
-@click.option('--diffusion-samples', default=1, type=click.IntRange(1, 5),
-              help='Number of diffusion samples (1-5, default: 1)')
+@click.option('--diffusion-samples', default=1, type=click.IntRange(1, 25),
+              help='Number of diffusion samples (1-25, default: 1)')
 @click.option('--step-scale', default=1.638, type=click.FloatRange(0.5, 5.0),
               help='Step scale for diffusion sampling (0.5-5.0, default: 1.638)')
 @click.option('--msa-file', multiple=True, type=(str, click.Choice(['sto', 'a3m', 'csv', 'fasta'])),
               help='MSA file and format (can be specified multiple times)')
 @click.option('--output-dir', type=click.Path(), default='.', help='Directory to save output files (structure_0.cif, prediction_metadata.json). Default: current directory')
 @click.option('--no-save', is_flag=True, help='Do not save structure files')
+@click.option('--write-full-pae', is_flag=True, default=False,
+              help='Output full PAE (Predicted Aligned Error) matrix as JSON')
+@click.option('--write-full-pde', is_flag=True, default=False,
+              help='Output full PDE (Predicted Distance Error) matrix as JSON')
+@click.option('--output-format', type=click.Choice(['cif', 'pdb']), default='cif',
+              help='Output structure format: cif (default) or pdb')
 @click.pass_context
 def protein(ctx, sequence: str, polymer_id: str, recycling_steps: int, sampling_steps: int,
            diffusion_samples: int, step_scale: float, msa_file: List[Tuple[str, str]], 
-           output_dir: str, no_save: bool):
+           output_dir: str, no_save: bool, write_full_pae: bool, write_full_pde: bool,
+           output_format: str):
     """
     Predict protein structure with optional MSA guidance.
     
@@ -301,9 +308,48 @@ def protein(ctx, sequence: str, polymer_id: str, recycling_steps: int, sampling_
             print_info(f"Predicting structure for protein sequence (length: {len(sequence)})")
             print_info(f"Parameters: recycling_steps={recycling_steps}, sampling_steps={sampling_steps}")
             print_info(f"            diffusion_samples={diffusion_samples}, step_scale={step_scale}")
+            if write_full_pae:
+                print_info(f"            write_full_pae=True")
+            if write_full_pde:
+                print_info(f"            write_full_pde=True")
             
             if msa_files:
                 print_info(f"Using {len(msa_files)} MSA file(s)")
+            
+            # Build MSA if files provided
+            msa_dict = None
+            if msa_files:
+                msa_dict = {}
+                for i, (file_path, format_type) in enumerate(msa_files):
+                    with open(file_path, "r") as fh:
+                        content = fh.read()
+                    msa_record = AlignmentFileRecord(
+                        alignment=content,
+                        format=format_type,
+                        rank=i
+                    )
+                    db_name = f"msa_{i}" if len(msa_files) > 1 else "default"
+                    if db_name not in msa_dict:
+                        msa_dict[db_name] = {}
+                    msa_dict[db_name][format_type] = msa_record
+            
+            # Create polymer and request
+            polymer = Polymer(
+                id=polymer_id,
+                molecule_type="protein",
+                sequence=sequence,
+                msa=msa_dict
+            )
+            
+            request = PredictionRequest(
+                polymers=[polymer],
+                recycling_steps=recycling_steps,
+                sampling_steps=sampling_steps,
+                diffusion_samples=diffusion_samples,
+                step_scale=step_scale,
+                write_full_pae=write_full_pae,
+                write_full_pde=write_full_pde
+            )
             
             with Progress(
                 SpinnerColumn(),
@@ -316,14 +362,8 @@ def protein(ctx, sequence: str, polymer_id: str, recycling_steps: int, sampling_
                 def progress_callback(message: str):
                     progress.update(task, description=message)
                 
-                result = await client.predict_protein_structure(
-                    sequence=sequence,
-                    polymer_id=polymer_id,
-                    recycling_steps=recycling_steps,
-                    sampling_steps=sampling_steps,
-                    diffusion_samples=diffusion_samples,
-                    step_scale=step_scale,
-                    msa_files=msa_files if msa_files else None,
+                result = await client.predict(
+                    request,
                     save_structures=not no_save,
                     output_dir=Path(output_dir),
                     progress_callback=progress_callback
@@ -341,6 +381,32 @@ def protein(ctx, sequence: str, polymer_id: str, recycling_steps: int, sampling_
             
             if not no_save:
                 print_info(f"Structures saved to: {output_dir}")
+                
+                # Convert to PDB if requested
+                if output_format == 'pdb':
+                    from .a3m_to_csv_converter import convert_cif_to_pdb
+                    for i in range(len(result.structures)):
+                        cif_path = Path(output_dir) / f"structure_{i}.cif"
+                        if cif_path.exists():
+                            pdb_path = Path(output_dir) / f"structure_{i}.pdb"
+                            convert_cif_to_pdb(cif_path, pdb_path)
+                            print_info(f"Converted to PDB: {pdb_path}")
+            
+            # Save PAE matrix if requested and available
+            if write_full_pae and result.pae:
+                import json
+                pae_path = Path(output_dir) / f"structure_{polymer_id}.pae.json"
+                pae_path.write_text(json.dumps({'pae': result.pae}, indent=2))
+                pae_shape = f"{len(result.pae)}x{len(result.pae[0])}x{len(result.pae[0][0])}"
+                print_info(f"PAE matrix saved to: {pae_path} (shape: {pae_shape})")
+            
+            # Save PDE matrix if requested and available
+            if write_full_pde and result.pde:
+                import json
+                pde_path = Path(output_dir) / f"structure_{polymer_id}.pde.json"
+                pde_path.write_text(json.dumps({'pde': result.pde}, indent=2))
+                pde_shape = f"{len(result.pde)}x{len(result.pde[0])}x{len(result.pde[0][0])}"
+                print_info(f"PDE matrix saved to: {pde_path} (shape: {pde_shape})")
             
         except Exception as e:
             print_error(f"Prediction failed: {e}")
@@ -1679,12 +1745,19 @@ def convert_msa_command(ctx, a3m_files: Tuple[str, ...], chain_ids: str,
               help='Number of diffusion sampling steps (default: 200)')
 @click.option('--diffusion-samples', type=int, default=1,
               help='Number of diffusion samples/structures (default: 1)')
+@click.option('--write-full-pae', is_flag=True, default=False,
+              help='Output full PAE (Predicted Aligned Error) matrix')
+@click.option('--write-full-pde', is_flag=True, default=False,
+              help='Output full PDE (Predicted Distance Error) matrix')
+@click.option('--output-format', type=click.Choice(['cif', 'pdb']), default='cif',
+              help='Output structure format: cif (default) or pdb')
 @click.pass_context
 def multimer_msa_command(ctx, a3m_files: Tuple[str, ...], chain_ids: str, 
                          output: Optional[str], save_csv: bool, save_all: bool,
                          max_pairs: Optional[int], pairing_mode: str, include_unpaired: bool,
                          recycling_steps: int, sampling_steps: int, 
-                         diffusion_samples: int):
+                         diffusion_samples: int, write_full_pae: bool, write_full_pde: bool,
+                         output_format: str):
     """
     Predict multimer structure from ColabFold A3M monomer MSA files.
     
@@ -1823,7 +1896,9 @@ def multimer_msa_command(ctx, a3m_files: Tuple[str, ...], chain_ids: str,
             polymers=polymers,
             recycling_steps=recycling_steps,
             sampling_steps=sampling_steps,
-            diffusion_samples=diffusion_samples
+            diffusion_samples=diffusion_samples,
+            write_full_pae=write_full_pae,
+            write_full_pde=write_full_pde
         )
         
         # Step 5: Get client (supports multi-endpoint mode)
@@ -1858,19 +1933,48 @@ def multimer_msa_command(ctx, a3m_files: Tuple[str, ...], chain_ids: str,
             
             output_path = Path(output)
             output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_text(cif_content)
+            
+            # Handle output format
+            if output_format == 'pdb':
+                # Save as CIF first, then convert
+                cif_temp_path = output_path.with_suffix('.cif')
+                cif_temp_path.write_text(cif_content)
+                
+                # Convert to PDB
+                from .a3m_to_csv_converter import convert_cif_to_pdb
+                pdb_path = output_path.with_suffix('.pdb')
+                convert_cif_to_pdb(cif_temp_path, pdb_path)
+                print_success(f"Structure saved to: {pdb_path}")
+                
+                # Also keep the CIF if save_all is enabled, otherwise remove
+                if not save_all:
+                    cif_temp_path.unlink()
+                else:
+                    print_info(f"CIF also saved: {cif_temp_path}")
+            else:
+                output_path.write_text(cif_content)
+                print_success(f"Structure saved to: {output_path}")
             
             atom_count = cif_content.count('ATOM ')
-            print_success(f"Structure saved to: {output_path}")
             print_info(f"Total atoms: {atom_count}")
             
             # Save additional structures if multiple samples
             if len(response.structures) > 1:
+                from .a3m_to_csv_converter import convert_cif_to_pdb
                 for i, struct in enumerate(response.structures[1:], start=2):
-                    extra_path = output_path.with_stem(f"{output_path.stem}_{i}")
                     cif = struct.structure if hasattr(struct, 'structure') else str(struct)
-                    extra_path.write_text(cif)
-                    print_info(f"Additional structure: {extra_path}")
+                    if output_format == 'pdb':
+                        extra_cif = output_path.with_stem(f"{output_path.stem}_{i}").with_suffix('.cif')
+                        extra_cif.write_text(cif)
+                        extra_pdb = output_path.with_stem(f"{output_path.stem}_{i}").with_suffix('.pdb')
+                        convert_cif_to_pdb(extra_cif, extra_pdb)
+                        print_info(f"Additional structure: {extra_pdb}")
+                        if not save_all:
+                            extra_cif.unlink()
+                    else:
+                        extra_path = output_path.with_stem(f"{output_path.stem}_{i}")
+                        extra_path.write_text(cif)
+                        print_info(f"Additional structure: {extra_path}")
             
             # Save all outputs if requested
             if save_all:
@@ -1909,6 +2013,20 @@ def multimer_msa_command(ctx, a3m_files: Tuple[str, ...], chain_ids: str,
                     print_info(f"Interface pTM: {response.iptm_scores[0]:.4f}")
                 if response.ptm_scores:
                     print_info(f"pTM: {response.ptm_scores[0]:.4f}")
+            
+            # Save PAE matrix if available
+            if write_full_pae and response.pae:
+                pae_path = output_path.with_suffix('.pae.json')
+                pae_path.write_text(json.dumps({'pae': response.pae}, indent=2))
+                pae_shape = f"{len(response.pae)}x{len(response.pae[0])}x{len(response.pae[0][0])}"
+                print_info(f"PAE matrix saved to: {pae_path} (shape: {pae_shape})")
+            
+            # Save PDE matrix if available
+            if write_full_pde and response.pde:
+                pde_path = output_path.with_suffix('.pde.json')
+                pde_path.write_text(json.dumps({'pde': response.pde}, indent=2))
+                pde_shape = f"{len(response.pde)}x{len(response.pde[0])}x{len(response.pde[0][0])}"
+                print_info(f"PDE matrix saved to: {pde_path} (shape: {pde_shape})")
         else:
             print_error("No structures returned from prediction")
             raise click.Abort()

@@ -19,11 +19,12 @@ from boltz2_client import (
 )
 
 # Real endpoint configuration
+# Example endpoints (replace with your actual Boltz2 NIM endpoints)
 REAL_ENDPOINTS = [
-    "http://10.185.105.21:8000",
-    "http://10.185.105.21:8001", 
-    "http://10.185.105.21:8002",
-    "http://10.185.105.21:8003"
+    "http://198.51.100.10:8000",
+    "http://198.51.100.10:8001", 
+    "http://198.51.100.10:8002",
+    "http://198.51.100.10:8003"
 ]
 
 # Test data

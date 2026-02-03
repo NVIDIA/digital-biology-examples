@@ -65,7 +65,7 @@ class MultiEndpointClient:
     def __init__(
         self,
         endpoints: List[Union[EndpointConfig, Dict[str, Any], str]],
-        strategy: LoadBalanceStrategy = LoadBalanceStrategy.ROUND_ROBIN,
+        strategy: LoadBalanceStrategy = LoadBalanceStrategy.LEAST_LOADED,
         health_check_interval: float = 60.0,
         timeout: float = 300.0,
         max_retries: int = 3,
