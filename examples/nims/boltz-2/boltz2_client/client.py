@@ -29,7 +29,7 @@ from .models import (
     PredictionRequest, PredictionResponse, HealthStatus, ServiceMetadata,
     Polymer, Ligand, PocketConstraint, BondConstraint, Atom, AlignmentFileRecord,
     StructureData, PredictionJob, PolymerType, AlignmentFormat, ConstraintType,
-    YAMLConfig, YAMLConfigType
+    YAMLConfig, YAMLConfigType, StructuralTemplate, Modification
 )
 from .exceptions import (
     Boltz2ClientError, Boltz2APIError, Boltz2ValidationError, 
@@ -581,6 +581,91 @@ class Boltz2Client:
         
         return await self.predict(request, **kwargs)
 
+    async def predict_with_templates(
+        self,
+        sequence: str,
+        templates: List[Union[str, Path, StructuralTemplate]],
+        polymer_id: str = "A",
+        template_format: str = "cif",
+        recycling_steps: int = 3,
+        sampling_steps: int = 50,
+        diffusion_samples: int = 1,
+        step_scale: float = 1.638,
+        msa: Optional[Dict[str, Dict[str, AlignmentFileRecord]]] = None,
+        **kwargs
+    ) -> PredictionResponse:
+        """
+        Predict protein structure using structural templates for guidance.
+        
+        Structural templates can improve prediction accuracy by providing
+        structural information from homologous proteins.
+        
+        Args:
+            sequence: Protein sequence
+            templates: List of templates - can be file paths (str/Path) or StructuralTemplate objects
+            polymer_id: Polymer identifier
+            template_format: Format of template files ("cif" or "pdb") - used when templates are file paths
+            recycling_steps: Number of recycling steps (1-10)
+            sampling_steps: Number of sampling steps (10-1000)
+            diffusion_samples: Number of diffusion samples (1-25)
+            step_scale: Step scale for diffusion (0.5-5.0)
+            msa: Pre-constructed MSA dictionary
+            **kwargs: Additional parameters for predict()
+            
+        Returns:
+            Prediction response
+            
+        Example:
+            >>> result = await client.predict_with_templates(
+            ...     sequence="MKTVRQERLKS...",
+            ...     templates=["template1.cif", "template2.pdb"],
+            ...     template_format="cif"
+            ... )
+        """
+        # Process templates
+        structural_templates = []
+        for i, template in enumerate(templates):
+            if isinstance(template, StructuralTemplate):
+                structural_templates.append(template)
+            else:
+                # Load from file
+                template_path = Path(template)
+                if not template_path.exists():
+                    raise FileNotFoundError(f"Template file not found: {template_path}")
+                
+                content = template_path.read_text()
+                # Determine format from extension or use provided format
+                fmt = template_path.suffix.lower().lstrip('.')
+                if fmt not in ('cif', 'pdb'):
+                    fmt = template_format
+                
+                structural_templates.append(StructuralTemplate(
+                    structure=content,
+                    format=fmt,
+                    name=template_path.stem
+                ))
+        
+        if len(structural_templates) > 4:
+            raise Boltz2ValidationError("Maximum 4 structural templates allowed")
+        
+        polymer = Polymer(
+            id=polymer_id,
+            molecule_type="protein",
+            sequence=sequence,
+            msa=msa,
+            structural_templates=structural_templates
+        )
+        
+        request = PredictionRequest(
+            polymers=[polymer],
+            recycling_steps=recycling_steps,
+            sampling_steps=sampling_steps,
+            diffusion_samples=diffusion_samples,
+            step_scale=step_scale
+        )
+        
+        return await self.predict(request, **kwargs)
+
     async def predict_with_advanced_parameters(
         self,
         polymers: List[Polymer],
@@ -592,21 +677,25 @@ class Boltz2Client:
         step_scale: float = 1.638,
         without_potentials: bool = False,
         concatenate_msas: bool = False,
+        write_full_pae: bool = False,
+        write_full_pde: bool = False,
         **kwargs
     ) -> PredictionResponse:
         """
         Predict structure with full control over all advanced parameters.
         
         Args:
-            polymers: List of polymers (proteins, DNA, RNA)
-            ligands: Optional list of ligands
+            polymers: List of polymers (proteins, DNA, RNA) - max 12
+            ligands: Optional list of ligands - max 20
             constraints: Optional list of constraints
-            recycling_steps: Number of recycling steps (1-6)
+            recycling_steps: Number of recycling steps (1-10)
             sampling_steps: Number of sampling steps (10-1000)
-            diffusion_samples: Number of diffusion samples (1-5)
+            diffusion_samples: Number of diffusion samples (1-25)
             step_scale: Step scale for diffusion sampling (0.5-5.0)
             without_potentials: Whether to run without potentials
             concatenate_msas: Whether to concatenate MSAs
+            write_full_pae: Whether to return full PAE matrix in response
+            write_full_pde: Whether to return full PDE matrix in response
             **kwargs: Additional parameters for predict()
             
         Returns:
@@ -621,7 +710,9 @@ class Boltz2Client:
             diffusion_samples=diffusion_samples,
             step_scale=step_scale,
             without_potentials=without_potentials,
-            concatenate_msas=concatenate_msas
+            concatenate_msas=concatenate_msas,
+            write_full_pae=write_full_pae,
+            write_full_pde=write_full_pde
         )
         
         return await self.predict(request, **kwargs)
@@ -1315,6 +1406,10 @@ class Boltz2SyncClient:
     def predict_with_advanced_parameters(self, **kwargs) -> PredictionResponse:
         """Make prediction with full parameter control."""
         return asyncio.run(self._async_client.predict_with_advanced_parameters(**kwargs))
+    
+    def predict_with_templates(self, **kwargs) -> PredictionResponse:
+        """Predict protein structure using structural templates for guidance."""
+        return asyncio.run(self._async_client.predict_with_templates(**kwargs))
     
     def configure_msa_search(
         self,

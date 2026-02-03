@@ -22,7 +22,7 @@ This document provides a comprehensive reference for all available Boltz-2 API p
 
 #### `polymers` (List[Polymer])
 - **Description**: List of polymers (DNA, RNA, or Protein) to predict
-- **Range**: 1-5 polymers
+- **Range**: 1-12 polymers (v1.5+), 1-5 (v1.3)
 - **Required**: Yes
 - **Example**:
 ```python
@@ -56,7 +56,7 @@ ligands = [
 
 ### `recycling_steps` (int)
 - **Description**: Number of recycling steps for iterative refinement
-- **Range**: 1-6
+- **Range**: 1-10 (v1.5+), 1-6 (v1.3)
 - **Default**: 3
 - **Effect**: Higher values improve accuracy but increase computation time
 - **Recommendations**:
@@ -76,7 +76,7 @@ ligands = [
 
 ### `diffusion_samples` (int)
 - **Description**: Number of independent diffusion samples
-- **Range**: 1-5
+- **Range**: 1-25 (v1.5+), 1-5 (v1.3)
 - **Default**: 1
 - **Effect**: Multiple samples provide diversity and ensemble predictions
 - **Usage**: Use >1 for uncertainty estimation or best-of-N selection
@@ -530,11 +530,11 @@ request = PredictionRequest(
 
 ### Speed vs Quality Trade-offs
 
-| Parameter | Fast | Balanced | High Quality |
-|-----------|------|----------|--------------|
-| recycling_steps | 1-2 | 3-4 | 5-6 |
+| Parameter | Fast | Balanced | High Quality (v1.5+) |
+|-----------|------|----------|----------------------|
+| recycling_steps | 1-2 | 3-4 | 6-10 |
 | sampling_steps | 10-30 | 50-100 | 200-1000 |
-| diffusion_samples | 1 | 1-2 | 3-5 |
+| diffusion_samples | 1 | 1-2 | 5-25 |
 | step_scale | 1.638 | 1.2-2.0 | 0.8-1.5 |
 
 ### Memory Usage
@@ -560,11 +560,11 @@ diffusion_samples=2
 step_scale=1.2
 ```
 
-#### High-Accuracy Research
+#### High-Accuracy Research (v1.5+)
 ```python
-recycling_steps=6
+recycling_steps=10      # Up to 10 in v1.5
 sampling_steps=500
-diffusion_samples=5
+diffusion_samples=25    # Up to 25 in v1.5
 step_scale=1.0
 ```
 
@@ -584,7 +584,7 @@ step_scale=1.0
 try:
     request = PredictionRequest(
         polymers=[],  # Empty list not allowed
-        recycling_steps=10  # Outside range 1-6
+        recycling_steps=15  # Outside range 1-10 (v1.5)
     )
 except ValidationError as e:
     print(f"Validation error: {e}")
