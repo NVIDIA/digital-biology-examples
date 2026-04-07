@@ -1,6 +1,6 @@
 # Async Programming Guide for Boltz-2 Python Client
 
-Copyright (c) 2025, NVIDIA CORPORATION. All rights reserved.
+Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
 
 This guide demonstrates how to efficiently perform asynchronous protein structure predictions using the Boltz-2 Python client. Async programming allows you to process multiple protein sequences concurrently, dramatically improving throughput for batch operations.
 
@@ -304,7 +304,7 @@ async def multi_endpoint_batch(sequences):
     return results
 ```
 
-See [MULTI_ENDPOINT_GUIDE.md](MULTI_ENDPOINT_GUIDE.md) for detailed setup instructions.
+See [multi_endpoint.md](multi_endpoint.md) for detailed setup instructions.
 
 ### Optimal Concurrency Settings
 

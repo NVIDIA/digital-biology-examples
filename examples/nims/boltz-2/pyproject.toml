@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=61.0,<77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,7 +7,7 @@ name = "boltz2-python-client"
 dynamic = ["version"]
 description = "Python client for Boltz-2 protein structure prediction API with covalent complex and multi-endpoint support"
 readme = "README.md"
-license = "MIT"
+license = {text = "MIT"}
 authors = [
     {name = "NVIDIA Corporation", email = "bionemo-support@nvidia.com"}
 ]
@@ -19,7 +19,7 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Developers",
-
+    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
@@ -41,6 +41,15 @@ dependencies = [
     "click>=8.0.0",
     "PyYAML>=6.0.0",
     "py3Dmol>=2.0.0",
+    "aiohttp>=3.8.0",
+]
+
+[project.optional-dependencies]
+sagemaker = ["boto3>=1.26.0"]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pandas>=1.5.0",
 ]
 
 [project.scripts]
@@ -48,8 +57,9 @@ boltz2 = "boltz2_client.cli:cli"
 
 [project.urls]
 Homepage = "https://github.com/NVIDIA/digital-biology-examples/tree/main/examples/nims/boltz-2"
-Repository = "https://github.com/NVIDIA/digital-biology-examples/tree/main/examples/nims/boltz-2"
-Documentation = "https://github.com/NVIDIA/digital-biology-examples/tree/main/examples/nims/boltz-2/README.md"
+Repository = "https://github.com/NVIDIA/digital-biology-examples"
+Documentation = "https://github.com/NVIDIA/digital-biology-examples/tree/main/examples/nims/boltz-2/docs"
+Changelog = "https://github.com/NVIDIA/digital-biology-examples/blob/main/examples/nims/boltz-2/CHANGELOG.md"
 "Bug Reports" = "https://github.com/NVIDIA/digital-biology-examples/issues"
 
 [tool.setuptools.dynamic]

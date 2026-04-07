@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# ---------------------------------------------------------------
+# Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
+# ---------------------------------------------------------------
+
 """
 Comprehensive Multi-Endpoint Boltz2 NIM Demo
 
@@ -41,6 +45,7 @@ from boltz2_client import (
     PredictionRequest,
     Polymer,
     Ligand,
+    Contact,
     PocketConstraint
 )
 
@@ -214,8 +219,7 @@ async def demo_multi_endpoint_virtual_screening(multi_client: MultiEndpointClien
             recycling_steps=2,
             sampling_steps=30,
             diffusion_samples=1,
-            pocket_residues=[10, 11, 12, 13, 14],
-            pocket_radius=8.0
+            pocket_residues=[10, 11, 12, 13, 14]
         )
         
         console.print(f"✅ Virtual screening completed!")

@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# ---------------------------------------------------------------
+# Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
+# ---------------------------------------------------------------
+
 """
 Example: Converting ColabFold A3M Monomer MSAs to Boltz2 Multimer CSV Format
 
@@ -20,7 +24,7 @@ How it works:
 4. Use these CSVs in Boltz2 prediction for multimer structure
 
 Usage:
-    python 15_a3m_to_multimer_csv.py
+    python 13_a3m_to_multimer_csv.py
     
 Or via CLI:
     boltz2 convert-msa chain_A.a3m chain_B.a3m -c A,B -o paired.csv

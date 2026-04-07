@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# ---------------------------------------------------------------
+# Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
+# ---------------------------------------------------------------
+
 """
 Example 12: MSA-Guided Protein-Ligand Affinity Prediction
 
@@ -52,9 +56,11 @@ async def predict_without_msa(client: Boltz2Client, output_dir: Path):
     
     if result.affinities and "DOR" in result.affinities:
         aff = result.affinities["DOR"]
+        pic50 = aff.affinity_pic50[0]
+        ic50_nm = (10**(-pic50)) * 1e9
         print(f"📊 Affinity predictions:")
-        print(f"   - pIC50: {aff.affinity_pic50[0]:.3f}")
-        print(f"   - IC50: {aff.affinity_ic50[0]:.3f} nM")
+        print(f"   - pIC50: {pic50:.3f}")
+        print(f"   - IC50: {ic50_nm:.3f} nM")
         print(f"   - Binding probability: {aff.affinity_probability_binary[0]:.3f}")
     
     return result
@@ -92,9 +98,11 @@ async def predict_with_msa_search(client: Boltz2Client, output_dir: Path):
     
     if result.affinities and "DOR" in result.affinities:
         aff = result.affinities["DOR"]
+        pic50 = aff.affinity_pic50[0]
+        ic50_nm = (10**(-pic50)) * 1e9
         print(f"📊 Affinity predictions:")
-        print(f"   - pIC50: {aff.affinity_pic50[0]:.3f}")
-        print(f"   - IC50: {aff.affinity_ic50[0]:.3f} nM")
+        print(f"   - pIC50: {pic50:.3f}")
+        print(f"   - IC50: {ic50_nm:.3f} nM")
         print(f"   - Binding probability: {aff.affinity_probability_binary[0]:.3f}")
     
     return result
@@ -126,9 +134,11 @@ async def predict_with_existing_msa(client: Boltz2Client, output_dir: Path):
         
         if result.affinities and "ACZ" in result.affinities:
             aff = result.affinities["ACZ"]
+            pic50 = aff.affinity_pic50[0]
+            ic50_nm = (10**(-pic50)) * 1e9
             print(f"📊 Affinity predictions for Acetazolamide:")
-            print(f"   - pIC50: {aff.affinity_pic50[0]:.3f}")
-            print(f"   - IC50: {aff.affinity_ic50[0]:.3f} nM")
+            print(f"   - pIC50: {pic50:.3f}")
+            print(f"   - IC50: {ic50_nm:.3f} nM")
             print(f"   - Binding probability: {aff.affinity_probability_binary[0]:.3f}")
     else:
         print("⚠️  MSA file not found. Run MSA search first.")
@@ -197,9 +207,11 @@ async def manual_msa_then_affinity(client: Boltz2Client, output_dir: Path):
     
     if result.affinities and "DOR" in result.affinities:
         aff = result.affinities["DOR"]
+        pic50 = aff.affinity_pic50[0]
+        ic50_nm = (10**(-pic50)) * 1e9
         print(f"📊 Affinity predictions:")
-        print(f"   - pIC50: {aff.affinity_pic50[0]:.3f}")
-        print(f"   - IC50: {aff.affinity_ic50[0]:.3f} nM")
+        print(f"   - pIC50: {pic50:.3f}")
+        print(f"   - IC50: {ic50_nm:.3f} nM")
         print(f"   - Binding probability: {aff.affinity_probability_binary[0]:.3f}")
 
 

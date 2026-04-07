@@ -1,15 +1,22 @@
+# ---------------------------------------------------------------
+# Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
+# ---------------------------------------------------------------
+
 """
 Pytest configuration file for Boltz2 multi-endpoint tests.
 
-This file provides common fixtures and configuration for all test modules.
+This file provides common fixtures, constants, and configuration for all test
+modules. Import shared constants from here rather than redefining them.
 """
 
 import pytest
-import asyncio
+import sys
 import tempfile
 import os
 from pathlib import Path
 from unittest.mock import Mock, AsyncMock
+
+sys.path.insert(0, os.path.dirname(__file__))
 
 from boltz2_client import (
     MultiEndpointClient,
@@ -18,24 +25,27 @@ from boltz2_client import (
     Boltz2Client,
     Boltz2SyncClient
 )
-from boltz2_client.models import PredictionResponse, HealthStatus, ServiceMetadata
+from boltz2_client.models import (
+    PredictionResponse, HealthStatus, ServiceMetadata,
+    StructureData, LicenseInfo,
+)
 
-
-@pytest.fixture(scope="session")
-def event_loop():
-    """Create an instance of the default event loop for the test session."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
+from constants import (  # noqa: F401
+    CDK2_SEQUENCE, SAMPLE_SMILES, SAMPLE_CCD, SAMPLE_DNA,
+    SAMPLE_COMPOUNDS, BOLTZ2_NIM_URL,
+)
 
 
 @pytest.fixture
 def sample_prediction_response():
     """Create a sample prediction response for testing."""
     return PredictionResponse(
-        structures=["structure1.cif", "structure2.cif"],
+        structures=[
+            StructureData(format="mmcif", structure="MOCK_CIF_1"),
+            StructureData(format="mmcif", structure="MOCK_CIF_2"),
+        ],
         confidence_scores=[0.85, 0.78],
-        metadata={"test": "data", "timestamp": "2025-01-01T00:00:00Z"}
+        metrics={"test": "data", "timestamp": "2025-01-01T00:00:00Z"}
     )
 
 
@@ -59,6 +69,11 @@ def sample_service_metadata():
         version="1.0.0",
         repository_override="test",
         assetInfo=["asset1", "asset2", "asset3"],
+        licenseInfo=LicenseInfo(
+            name="MIT", path="/LICENSE", sha="abc123",
+            size=1000, url="https://example.com/license",
+            type="file", content="MIT License"
+        ),
         modelInfo=[
             {"modelUrl": "https://example.com/model1", "shortName": "Model1"},
             {"modelUrl": "https://example.com/model2", "shortName": "Model2"}
@@ -222,16 +237,12 @@ def mock_mixed_health_endpoints():
 @pytest.fixture
 def temp_yaml_file():
     """Create a temporary YAML file for testing."""
-    yaml_content = """
-    polymers:
-      - id: A
-        molecule_type: protein
-        sequence: MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLAGG
-    recycling_steps: 3
-    sampling_steps: 50
-    diffusion_samples: 1
-    step_scale: 1.638
-    """
+    yaml_content = """version: 1
+sequences:
+  - protein:
+      id: A
+      sequence: MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLAGG
+"""
     
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
         f.write(yaml_content)
@@ -298,6 +309,8 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "api: marks tests as API tests"
     )
+    config.addinivalue_line("markers", "real_endpoint: Tests that run against real endpoints")
+    config.addinivalue_line("markers", "performance: Performance and load testing")
 
 
 # Test collection hooks

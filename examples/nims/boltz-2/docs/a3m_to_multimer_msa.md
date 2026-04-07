@@ -1,5 +1,7 @@
 # A3M to Multimer MSA Conversion Guide
 
+Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
+
 This guide explains how to convert ColabFold-generated A3M monomer MSA files into the paired CSV format required by Boltz2 for multimer structure predictions.
 
 ## Table of Contents
@@ -348,8 +350,8 @@ request = PredictionRequest(
 )
 
 # Step 4: Run prediction
-async with Boltz2Client(base_url="http://localhost:8000") as client:
-    response = await client.predict(request)
+client = Boltz2Client(base_url="http://localhost:8000")
+response = await client.predict(request)
 
 # Step 5: Save all outputs
 saved = save_prediction_outputs(
@@ -591,3 +593,7 @@ The A3M to Multimer MSA converter enables seamless transition from ColabFold mon
 4. **Optionally including** unpaired sequences in block-diagonal format
 
 This provides Boltz2 with the co-evolutionary signal needed for accurate multimer structure prediction.
+
+## Disclaimer
+
+This software is provided as-is without warranties of any kind. No guarantees are made regarding the accuracy, reliability, or fitness for any particular purpose. The underlying models and APIs are experimental and subject to change without notice. Users are responsible for validating all results and assessing suitability for their specific use cases.

@@ -1,6 +1,8 @@
 # Affinity Prediction Guide
 
-This guide explains how to use the new affinity prediction capabilities in Boltz-2 to estimate binding affinity between proteins and ligands.
+Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
+
+This guide explains how to use the affinity prediction capabilities in Boltz-2 to estimate binding affinity between proteins and ligands.
 
 ## Overview
 
@@ -41,7 +43,7 @@ Affinity prediction in Boltz-2 estimates the binding strength between a protein 
 ## Basic Usage
 
 ```python
-from boltz2_client import Boltz2Client, Polymer, Ligand
+from boltz2_client import Boltz2Client, Polymer, Ligand, PredictionRequest
 
 # Initialize client
 client = Boltz2Client(base_url="http://localhost:8000")
@@ -61,13 +63,14 @@ ligand = Ligand(
 )
 
 # Predict structure and affinity
-result = await client.predict_structure(
+request = PredictionRequest(
     polymers=[protein],
     ligands=[ligand],
     sampling_steps_affinity=200,  # Optional
     diffusion_samples_affinity=5,  # Optional
-    affinity_mw_correction=False   # Optional
+    affinity_mw_correction=False,  # Optional
 )
+result = await client.predict(request)
 
 # Access affinity results
 if result.affinities and "LIG" in result.affinities:
@@ -139,15 +142,14 @@ result.affinities = {
 
 ```python
 # Real-world example with kinase and Y7W inhibitor
-kinase_seq = "GMGLGYGSWEI..."  # Full sequence in examples/08_affinity_prediction.py
+kinase_seq = "GMGLGYGSWEI..."  # Full sequence in examples/kinase_y7w_affinity.json or examples/08_affinity_prediction_simple.py
 
-protein = Polymer(id="A", molecule_type="protein", sequence=kinase_seq)
-ligand = Ligand(id="Y7W", ccd="Y7W", predict_affinity=True)
-
-result = await client.predict_structure(
-    polymers=[protein],
-    ligands=[ligand],
-    sampling_steps_affinity=200
+result = await client.predict_protein_ligand_complex(
+    protein_sequence=kinase_seq,
+    ligand_ccd="Y7W",
+    ligand_id="Y7W",
+    predict_affinity=True,
+    sampling_steps_affinity=200,
 )
 ```
 
@@ -181,7 +183,7 @@ result = await client.predict_ligand_with_msa_search(
     protein_sequence="YOUR_PROTEIN_SEQUENCE",
     ligand_smiles="YOUR_LIGAND_SMILES",
     predict_affinity=True,
-    databases=["uniref90", "pdb70"],
+    databases=["uniref30_2302", "colabfold_envdb_202108"],
     max_msa_sequences=1000,
     sampling_steps_affinity=300,
     diffusion_samples_affinity=8,
@@ -192,7 +194,8 @@ result = await client.predict_ligand_with_msa_search(
 if result.affinities and "LIG" in result.affinities:
     aff = result.affinities["LIG"]
     print(f"pIC50: {aff.affinity_pic50[0]:.3f}")
-    print(f"IC50: {aff.affinity_ic50[0]:.3f} nM")
+    print(f"Affinity pred value: {aff.affinity_pred_value[0]:.3f}")
+    print(f"IC50: {10 ** (-aff.affinity_pic50[0]) * 1e9:.3f} nM")
 ```
 
 ### Method 2: Using Pre-computed MSA
@@ -260,7 +263,7 @@ For optimal results when combining MSA with affinity prediction:
 
 ```python
 # MSA parameters
-databases = ["uniref90", "pdb70"]  # High-quality databases
+databases = ["uniref30_2302", "colabfold_envdb_202108"]
 max_msa_sequences = 1000  # More sequences for better coverage
 e_value = 0.0001  # Strict threshold
 
@@ -276,7 +279,8 @@ affinity_mw_correction = True  # Often improves accuracy
 
 ## See Also
 
-- `examples/08_affinity_prediction.py` - Complete working example
+- `examples/08_affinity_prediction_simple.py` - Working affinity prediction example
+- `examples/cdk4_msa_affinity_example.py` - Script companion to the CDK4 MSA + affinity notebook
 - `examples/12_msa_affinity_prediction.py` - MSA + affinity example
 - [Chemical Component Dictionary](https://www.wwpdb.org/data/ccd) - For CCD codes
 - API documentation at `http://localhost:8000/docs`

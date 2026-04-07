@@ -2,6 +2,42 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.1] - 2026-04-07
+
+### Fixed
+- CLI `metadata` command now shows a clear error for SageMaker endpoints instead of a cryptic `NoneType` error
+- SageMaker endpoint exception handling cleanup in CLI
+
+## [0.5.0] - 2026-04-07
+
+### Added
+- AWS SageMaker endpoint support (`EndpointType.SAGEMAKER`, CLI `--endpoint-type sagemaker`, `--sagemaker-endpoint-name`, `--sagemaker-region`)
+
+### Changed
+- **PocketConstraint API** now uses `Contact` objects (binder + contacts)
+- **Parameter ranges:** `recycling_steps` 1–10, `diffusion_samples` 1–25
+- **`write_full_pde`** support for full predicted distance error matrix output
+- **`Ligand.id`** is optional
+- Compatibility updates for **Boltz-2 NIM v1.6.0**
+
+### Fixed
+- Comprehensive test suite fixes and live endpoint tests
+
+## [0.4.0] - 2025-11-01
+
+### Added
+- A3M to multimer MSA conversion utilities, `multimer-msa` and `convert-msa` CLI commands
+- Example script `13_a3m_to_multimer_csv.py` and guides (`docs/a3m_to_multimer_msa.md`)
+- Multimer notebooks (`01_multimer_prediction.ipynb`, `03_colabfold_a3m_to_multimer.ipynb`) and related example scripts
+- `08_affinity_prediction_simple.py` as the maintained affinity example (with `kinase_y7w_affinity.json`)
+
+### Changed
+- Multi-endpoint client default load-balancing strategy documented as **least-loaded**; expanded multi-endpoint coverage across prediction APIs
+- README and guides updated for v1.5 NIM parameter limits (recycling/diffusion), PAE/PDE output, and PDB export
+
+### Documentation
+- Multi-endpoint virtual screening guide and examples (`comprehensive_multi_endpoint_demo.py`, `multi_endpoint_screening.py`)
+
 ## [0.3.0] - 2025-09-11
 
 ### Added

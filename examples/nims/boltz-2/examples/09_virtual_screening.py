@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ---------------------------------------------------------------
-# Copyright (c) 2025, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
 # ---------------------------------------------------------------
 
 """
@@ -77,7 +77,6 @@ def example_advanced():
         target_name="BTK Kinase",
         predict_affinity=True,
         pocket_residues=pocket_residues,
-        pocket_radius=12.0,
         recycling_steps=2,
         sampling_steps=40,
         sampling_steps_affinity=100,

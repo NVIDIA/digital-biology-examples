@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# ---------------------------------------------------------------
+# Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
+# ---------------------------------------------------------------
+
 """
 10_msa_search_integration.py
 
@@ -93,7 +97,7 @@ async def search_and_save_msa(
         sequence=sequence,
         databases=["Uniref30_2302", "colabfold_envdb_202108"],
         max_msa_sequences=500,
-        e_value=10.0,
+        e_value=0.1,
         output_format="a3m",
         save_path=output_dir / f"{protein_name}_msa.a3m"
     )
@@ -131,7 +135,7 @@ async def predict_with_automatic_msa(
         polymer_id="A",
         databases=["Uniref30_2302"],
         max_msa_sequences=1000,
-        e_value=10.0,
+        e_value=0.1,
         recycling_steps=3,
         sampling_steps=50,
         diffusion_samples=1
@@ -225,7 +229,7 @@ async def batch_msa_search_demo(
         output_format="a3m",
         databases=["Uniref30_2302"],
         max_msa_sequences=500,
-        e_value=10.0
+        e_value=0.1
     )
     
     print(f"\n✅ Batch search completed!")

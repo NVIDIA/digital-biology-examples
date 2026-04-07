@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------
-# Copyright (c) 2025, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
 # ---------------------------------------------------------------
 
 """
@@ -19,7 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 
 from .client import Boltz2Client, Boltz2SyncClient
-from .models import Polymer, Ligand, PredictionRequest, PocketConstraint
+from .models import Polymer, Ligand, PredictionRequest, Contact, PocketConstraint
 from .exceptions import Boltz2ValidationError
 from .multi_endpoint_client import MultiEndpointClient
 
@@ -239,7 +239,6 @@ class VirtualScreening:
                target_name: str = "Target",
                predict_affinity: bool = True,
                pocket_residues: Optional[List[int]] = None,
-               pocket_radius: float = 10.0,
                recycling_steps: int = 2,
                sampling_steps: int = 30,
                diffusion_samples: int = 1,
@@ -256,8 +255,7 @@ class VirtualScreening:
             compound_library: Compounds to screen (CompoundLibrary, list, or path to file)
             target_name: Name of the target protein
             predict_affinity: Enable affinity prediction
-            pocket_residues: List of residue indices defining binding pocket
-            pocket_radius: Radius for pocket constraint in Angstroms
+            pocket_residues: List of 1-based residue indices defining binding pocket
             recycling_steps: Number of recycling steps
             sampling_steps: Number of sampling steps
             diffusion_samples: Number of diffusion samples
@@ -287,7 +285,6 @@ class VirtualScreening:
             "target_name": target_name,
             "predict_affinity": predict_affinity,
             "pocket_residues": pocket_residues,
-            "pocket_radius": pocket_radius,
             "recycling_steps": recycling_steps,
             "sampling_steps": sampling_steps,
             "diffusion_samples": diffusion_samples,
@@ -303,13 +300,13 @@ class VirtualScreening:
             # Use async screening
             results = asyncio.run(self._screen_async(
                 target_sequence, compound_library, parameters, 
-                pocket_residues, pocket_radius, progress_callback
+                pocket_residues, progress_callback
             ))
         else:
             # Use sync screening with thread pool
             results = self._screen_sync(
                 target_sequence, compound_library, parameters,
-                pocket_residues, pocket_radius, progress_callback, batch_size
+                pocket_residues, progress_callback, batch_size
             )
         
         duration = time.time() - start_time
@@ -324,7 +321,7 @@ class VirtualScreening:
     
     def _screen_sync(self, target_sequence: str, compound_library: CompoundLibrary,
                      parameters: Dict, pocket_residues: Optional[List[int]],
-                     pocket_radius: float, progress_callback: Optional[Callable],
+                     progress_callback: Optional[Callable],
                      batch_size: Optional[int]) -> List[Dict]:
         """Synchronous screening implementation."""
         results = []
@@ -340,12 +337,8 @@ class VirtualScreening:
         # Prepare pocket constraint if specified
         constraints = []
         if pocket_residues:
-            pocket_constraint = PocketConstraint(
-                chain_id="A",
-                residue_idxs=pocket_residues,
-                radius=pocket_radius
-            )
-            constraints.append(pocket_constraint)
+            contacts = [Contact(id="A", residue_index=r) for r in pocket_residues]
+            constraints.append(PocketConstraint(binder="LIG", contacts=contacts))
         
         # Process compounds
         if batch_size and batch_size < total:
@@ -382,7 +375,7 @@ class VirtualScreening:
     
     async def _screen_async(self, target_sequence: str, compound_library: CompoundLibrary,
                            parameters: Dict, pocket_residues: Optional[List[int]],
-                           pocket_radius: float, progress_callback: Optional[Callable]) -> List[Dict]:
+                           progress_callback: Optional[Callable]) -> List[Dict]:
         """Asynchronous screening implementation."""
         # Create protein polymer
         protein = Polymer(
@@ -391,15 +384,10 @@ class VirtualScreening:
             sequence=target_sequence
         )
         
-        # Prepare pocket constraint
         constraints = []
         if pocket_residues:
-            pocket_constraint = PocketConstraint(
-                chain_id="A",
-                residue_idxs=pocket_residues,
-                radius=pocket_radius
-            )
-            constraints.append(pocket_constraint)
+            contacts = [Contact(id="A", residue_index=r) for r in pocket_residues]
+            constraints.append(PocketConstraint(binder="LIG", contacts=contacts))
         
         # Create tasks
         tasks = []

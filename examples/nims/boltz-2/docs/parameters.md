@@ -1,6 +1,6 @@
 # Boltz-2 API Parameters Reference
 
-Copyright (c) 2025, NVIDIA CORPORATION. All rights reserved.
+Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
 
 This document provides a comprehensive reference for all available Boltz-2 API parameters, their ranges, effects, and usage examples.
 
@@ -22,7 +22,7 @@ This document provides a comprehensive reference for all available Boltz-2 API p
 
 #### `polymers` (List[Polymer])
 - **Description**: List of polymers (DNA, RNA, or Protein) to predict
-- **Range**: 1-5 polymers
+- **Range**: 1-12 polymers (v1.6+), 1-5 (v1.3)
 - **Required**: Yes
 - **Example**:
 ```python
@@ -39,7 +39,7 @@ polymers = [
 
 #### `ligands` (List[Ligand])
 - **Description**: List of ligands for complex prediction
-- **Range**: 0-5 ligands
+- **Range**: 0-20 ligands
 - **Required**: No
 - **Default**: None
 - **Example**:
@@ -56,13 +56,13 @@ ligands = [
 
 ### `recycling_steps` (int)
 - **Description**: Number of recycling steps for iterative refinement
-- **Range**: 1-6
+- **Range**: 1-10 (v1.6+), 1-6 (v1.3)
 - **Default**: 3
 - **Effect**: Higher values improve accuracy but increase computation time
 - **Recommendations**:
   - 1-2: Fast, lower accuracy
   - 3-4: Balanced (recommended)
-  - 5-6: High accuracy, slower
+  - 5-10: High accuracy, slower
 
 ### `sampling_steps` (int)
 - **Description**: Number of diffusion sampling steps
@@ -76,7 +76,7 @@ ligands = [
 
 ### `diffusion_samples` (int)
 - **Description**: Number of independent diffusion samples
-- **Range**: 1-5
+- **Range**: 1-25 (v1.6+), 1-5 (v1.3)
 - **Default**: 1
 - **Effect**: Multiple samples provide diversity and ensemble predictions
 - **Usage**: Use >1 for uncertainty estimation or best-of-N selection
@@ -154,11 +154,14 @@ Ligand(
 Define binding pockets for ligand placement:
 
 ```python
+from boltz2_client.models import Contact, PocketConstraint
+
 PocketConstraint(
-    constraint_type="pocket",
-    ligand_id="LIG",
-    polymer_id="A",
-    residue_ids=[10, 15, 20, 25, 30]  # 1-based indexing
+    binder="LIG",
+    contacts=[
+        Contact(id="A", residue_index=r)
+        for r in (10, 15, 20, 25, 30)  # 1-based residue indices
+    ],
 )
 ```
 
@@ -294,7 +297,7 @@ The response includes an `affinities` dictionary with the following fields for e
 ### Affinity Usage Example
 
 ```python
-from boltz2_client import Boltz2Client, Polymer, Ligand
+from boltz2_client import Boltz2Client, Polymer, Ligand, PredictionRequest
 
 client = Boltz2Client()
 
@@ -302,14 +305,15 @@ client = Boltz2Client()
 protein = Polymer(id="A", molecule_type="protein", sequence="YOUR_SEQUENCE")
 ligand = Ligand(id="LIG", smiles="YOUR_SMILES", predict_affinity=True)
 
-# Predict with affinity
-result = await client.predict_structure(
+# Predict with affinity (use PredictionRequest + predict when passing polymers and ligands)
+request = PredictionRequest(
     polymers=[protein],
     ligands=[ligand],
     sampling_steps_affinity=300,
     diffusion_samples_affinity=8,
-    affinity_mw_correction=True
+    affinity_mw_correction=True,
 )
+result = await client.predict(request)
 
 # Access results
 if result.affinities and "LIG" in result.affinities:
@@ -387,6 +391,8 @@ result = await client.predict(request)
 
 ### 2. Protein-Ligand Complex
 ```python
+from boltz2_client.models import Polymer, Ligand, PredictionRequest, Contact, PocketConstraint
+
 protein = Polymer(
     id="A",
     molecule_type="protein",
@@ -400,9 +406,10 @@ ligand = Ligand(
 
 # Define binding pocket
 pocket = PocketConstraint(
-    ligand_id="LIG",
-    polymer_id="A",
-    residue_ids=[10, 15, 20, 25]
+    binder="LIG",
+    contacts=[
+        Contact(id="A", residue_index=r) for r in (10, 15, 20, 25)
+    ],
 )
 
 request = PredictionRequest(
@@ -530,11 +537,11 @@ request = PredictionRequest(
 
 ### Speed vs Quality Trade-offs
 
-| Parameter | Fast | Balanced | High Quality |
-|-----------|------|----------|--------------|
-| recycling_steps | 1-2 | 3-4 | 5-6 |
+| Parameter | Fast | Balanced | High Quality (v1.6+) |
+|-----------|------|----------|----------------------|
+| recycling_steps | 1-2 | 3-4 | 6-10 |
 | sampling_steps | 10-30 | 50-100 | 200-1000 |
-| diffusion_samples | 1 | 1-2 | 3-5 |
+| diffusion_samples | 1 | 1-2 | 5-25 |
 | step_scale | 1.638 | 1.2-2.0 | 0.8-1.5 |
 
 ### Memory Usage
@@ -560,11 +567,11 @@ diffusion_samples=2
 step_scale=1.2
 ```
 
-#### High-Accuracy Research
+#### High-Accuracy Research (v1.6+)
 ```python
-recycling_steps=6
+recycling_steps=10      # Up to 10 in v1.6
 sampling_steps=500
-diffusion_samples=5
+diffusion_samples=25    # Up to 25 in v1.6
 step_scale=1.0
 ```
 
@@ -584,7 +591,7 @@ step_scale=1.0
 try:
     request = PredictionRequest(
         polymers=[],  # Empty list not allowed
-        recycling_steps=10  # Outside range 1-6
+        recycling_steps=15  # Outside range 1-10 (v1.6)
     )
 except ValidationError as e:
     print(f"Validation error: {e}")

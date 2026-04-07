@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# ---------------------------------------------------------------
+# Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
+# ---------------------------------------------------------------
+
 """
 CLI Test Suite for Multi-Endpoint Boltz2 NIM Functionality
 
@@ -19,12 +23,12 @@ import pytest
 import tempfile
 import os
 from pathlib import Path
-from unittest.mock import Mock, patch, AsyncMock, MagicMock
-import click
+from unittest.mock import Mock, patch, AsyncMock
 from click.testing import CliRunner
 
 from boltz2_client.cli import cli
-from boltz2_client import MultiEndpointClient, LoadBalanceStrategy, EndpointConfig
+from boltz2_client import MultiEndpointClient, LoadBalanceStrategy
+from boltz2_client.models import PredictionResponse, StructureData
 
 
 class TestCLIMultiEndpoint:
@@ -41,10 +45,12 @@ class TestCLIMultiEndpoint:
         client = Mock(spec=MultiEndpointClient)
         client.health_check = AsyncMock()
         client.get_service_metadata = AsyncMock()
+        client.predict = AsyncMock()
         client.predict_protein_structure = AsyncMock()
         client.predict_protein_ligand_complex = AsyncMock()
         client.predict_covalent_complex = AsyncMock()
         client.predict_dna_protein_complex = AsyncMock()
+        client.predict_with_advanced_parameters = AsyncMock()
         client.predict_from_yaml_config = AsyncMock()
         client.predict_from_yaml_file = AsyncMock()
         client.print_status = Mock()
@@ -56,10 +62,12 @@ class TestCLIMultiEndpoint:
         client = Mock()
         client.health_check = AsyncMock()
         client.get_service_metadata = AsyncMock()
+        client.predict = AsyncMock()
         client.predict_protein_structure = AsyncMock()
         client.predict_protein_ligand_complex = AsyncMock()
         client.predict_covalent_complex = AsyncMock()
         client.predict_dna_protein_complex = AsyncMock()
+        client.predict_with_advanced_parameters = AsyncMock()
         client.predict_from_yaml_config = AsyncMock()
         client.predict_from_yaml_file = AsyncMock()
         return client
@@ -146,9 +154,12 @@ class TestCLIMultiEndpoint:
     def test_protein_single_endpoint(self, cli_runner, mock_single_client):
         """Test protein command with single endpoint."""
         with patch('boltz2_client.cli.create_client', return_value=mock_single_client):
-            mock_single_client.predict_protein_structure.return_value = Mock(
-                structures=["structure1", "structure2"],
-                confidence_scores=[0.85, 0.78]
+            mock_single_client.predict.return_value = PredictionResponse(
+                structures=[
+                    StructureData(format="mmcif", structure="MOCK_CIF"),
+                    StructureData(format="mmcif", structure="MOCK_CIF"),
+                ],
+                confidence_scores=[0.85, 0.78],
             )
             
             result = cli_runner.invoke(cli, [
@@ -161,14 +172,17 @@ class TestCLIMultiEndpoint:
             
             assert result.exit_code == 0
             assert "Prediction completed successfully" in result.output
-            mock_single_client.predict_protein_structure.assert_called_once()
+            mock_single_client.predict.assert_called_once()
     
     def test_protein_multi_endpoint(self, cli_runner, mock_multi_endpoint_client):
         """Test protein command with multiple endpoints."""
         with patch('boltz2_client.cli.create_client', return_value=mock_multi_endpoint_client):
-            mock_multi_endpoint_client.predict_protein_structure.return_value = Mock(
-                structures=["structure1", "structure2"],
-                confidence_scores=[0.85, 0.78]
+            mock_multi_endpoint_client.predict.return_value = PredictionResponse(
+                structures=[
+                    StructureData(format="mmcif", structure="MOCK_CIF"),
+                    StructureData(format="mmcif", structure="MOCK_CIF"),
+                ],
+                confidence_scores=[0.85, 0.78],
             )
             
             result = cli_runner.invoke(cli, [
@@ -182,15 +196,15 @@ class TestCLIMultiEndpoint:
             
             assert result.exit_code == 0
             assert "Prediction completed successfully" in result.output
-            mock_multi_endpoint_client.predict_protein_structure.assert_called_once()
+            mock_multi_endpoint_client.predict.assert_called_once()
 
     # Test 4: Ligand Command
     def test_ligand_single_endpoint(self, cli_runner, mock_single_client):
         """Test ligand command with single endpoint."""
         with patch('boltz2_client.cli.create_client', return_value=mock_single_client):
-            mock_single_client.predict_protein_ligand_complex.return_value = Mock(
-                structures=["complex1"],
-                confidence_scores=[0.82]
+            mock_single_client.predict_protein_ligand_complex.return_value = PredictionResponse(
+                structures=[StructureData(format="mmcif", structure="MOCK_CIF")],
+                confidence_scores=[0.82],
             )
             
             result = cli_runner.invoke(cli, [
@@ -200,15 +214,15 @@ class TestCLIMultiEndpoint:
             ])
             
             assert result.exit_code == 0
-            assert "Prediction completed successfully" in result.output
+            assert "Complex prediction completed successfully" in result.output
             mock_single_client.predict_protein_ligand_complex.assert_called_once()
     
     def test_ligand_multi_endpoint(self, cli_runner, mock_multi_endpoint_client):
         """Test ligand command with multiple endpoints."""
         with patch('boltz2_client.cli.create_client', return_value=mock_multi_endpoint_client):
-            mock_multi_endpoint_client.predict_protein_ligand_complex.return_value = Mock(
-                structures=["complex1"],
-                confidence_scores=[0.82]
+            mock_multi_endpoint_client.predict_protein_ligand_complex.return_value = PredictionResponse(
+                structures=[StructureData(format="mmcif", structure="MOCK_CIF")],
+                confidence_scores=[0.82],
             )
             
             result = cli_runner.invoke(cli, [
@@ -219,104 +233,104 @@ class TestCLIMultiEndpoint:
             ])
             
             assert result.exit_code == 0
-            assert "Prediction completed successfully" in result.output
+            assert "Complex prediction completed successfully" in result.output
             mock_multi_endpoint_client.predict_protein_ligand_complex.assert_called_once()
 
     # Test 5: Covalent Command
     def test_covalent_single_endpoint(self, cli_runner, mock_single_client):
         """Test covalent command with single endpoint."""
         with patch('boltz2_client.cli.create_client', return_value=mock_single_client):
-            mock_single_client.predict_covalent_complex.return_value = Mock(
-                structures=["covalent1"],
-                confidence_scores=[0.79]
+            mock_single_client.predict_with_advanced_parameters.return_value = PredictionResponse(
+                structures=[StructureData(format="mmcif", structure="MOCK_CIF")],
+                confidence_scores=[0.79],
             )
             
             result = cli_runner.invoke(cli, [
                 '--base-url', 'http://localhost:8000',
-                'covalent', 'MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLAGG',
-                '--ccd', 'ASP'
+                'covalent', 'CCGG',
+                '--disulfide', 'A:1:A:2',
             ])
             
             assert result.exit_code == 0
-            assert "Prediction completed successfully" in result.output
-            mock_single_client.predict_covalent_complex.assert_called_once()
+            assert "Covalent complex prediction completed successfully" in result.output
+            mock_single_client.predict_with_advanced_parameters.assert_called_once()
     
     def test_covalent_multi_endpoint(self, cli_runner, mock_multi_endpoint_client):
         """Test covalent command with multiple endpoints."""
         with patch('boltz2_client.cli.create_client', return_value=mock_multi_endpoint_client):
-            mock_multi_endpoint_client.predict_covalent_complex.return_value = Mock(
-                structures=["covalent1"],
-                confidence_scores=[0.79]
+            mock_multi_endpoint_client.predict_with_advanced_parameters.return_value = PredictionResponse(
+                structures=[StructureData(format="mmcif", structure="MOCK_CIF")],
+                confidence_scores=[0.79],
             )
             
             result = cli_runner.invoke(cli, [
                 '--multi-endpoint',
                 '--base-url', 'http://localhost:8000,http://localhost:8001',
-                'covalent', 'MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLAGG',
-                '--ccd', 'ASP'
+                'covalent', 'CCGG',
+                '--disulfide', 'A:1:A:2',
             ])
             
             assert result.exit_code == 0
-            assert "Prediction completed successfully" in result.output
-            mock_multi_endpoint_client.predict_covalent_complex.assert_called_once()
+            assert "Covalent complex prediction completed successfully" in result.output
+            mock_multi_endpoint_client.predict_with_advanced_parameters.assert_called_once()
 
     # Test 6: DNA-Protein Command
     def test_dna_protein_single_endpoint(self, cli_runner, mock_single_client):
         """Test dna_protein command with single endpoint."""
         with patch('boltz2_client.cli.create_client', return_value=mock_single_client):
-            mock_single_client.predict_dna_protein_complex.return_value = Mock(
-                structures=["dna_protein1"],
-                confidence_scores=[0.81]
+            mock_single_client.predict_dna_protein_complex.return_value = PredictionResponse(
+                structures=[StructureData(format="mmcif", structure="MOCK_CIF")],
+                confidence_scores=[0.81],
             )
             
             result = cli_runner.invoke(cli, [
                 '--base-url', 'http://localhost:8000',
-                'dna_protein', 'MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLAGG',
-                'ATCGATCGATCGATCG'
+                'dna-protein',
+                '--protein-sequences', 'MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLAGG',
+                '--dna-sequences', 'ATCGATCGATCGATCG',
             ])
             
             assert result.exit_code == 0
-            assert "Prediction completed successfully" in result.output
+            assert "DNA-protein complex prediction completed successfully" in result.output
             mock_single_client.predict_dna_protein_complex.assert_called_once()
     
     def test_dna_protein_multi_endpoint(self, cli_runner, mock_multi_endpoint_client):
         """Test dna_protein command with multiple endpoints."""
         with patch('boltz2_client.cli.create_client', return_value=mock_multi_endpoint_client):
-            mock_multi_endpoint_client.predict_dna_protein_complex.return_value = Mock(
-                structures=["dna_protein1"],
-                confidence_scores=[0.81]
+            mock_multi_endpoint_client.predict_dna_protein_complex.return_value = PredictionResponse(
+                structures=[StructureData(format="mmcif", structure="MOCK_CIF")],
+                confidence_scores=[0.81],
             )
             
             result = cli_runner.invoke(cli, [
                 '--multi-endpoint',
                 '--base-url', 'http://localhost:8000,http://localhost:8001',
-                'dna_protein', 'MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLAGG',
-                'ATCGATCGATCGATCG'
+                'dna-protein',
+                '--protein-sequences', 'MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLAGG',
+                '--dna-sequences', 'ATCGATCGATCGATCG',
             ])
             
             assert result.exit_code == 0
-            assert "Prediction completed successfully" in result.output
+            assert "DNA-protein complex prediction completed successfully" in result.output
             mock_multi_endpoint_client.predict_dna_protein_complex.assert_called_once()
 
     # Test 7: YAML Command
     def test_yaml_single_endpoint(self, cli_runner, mock_single_client):
         """Test yaml command with single endpoint."""
         with patch('boltz2_client.cli.create_client', return_value=mock_single_client):
-            mock_single_client.predict_from_yaml_file.return_value = Mock(
-                structures=["yaml_structure"],
-                confidence_scores=[0.83]
+            mock_single_client.predict.return_value = PredictionResponse(
+                structures=[StructureData(format="mmcif", structure="MOCK_CIF")],
+                confidence_scores=[0.83],
             )
             
             # Create temporary YAML file
             with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-                yaml_content = """
-                polymers:
-                  - id: A
-                    molecule_type: protein
-                    sequence: MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLAGG
-                recycling_steps: 3
-                sampling_steps: 50
-                """
+                yaml_content = """version: 1
+sequences:
+  - protein:
+      id: A
+      sequence: MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLAGG
+"""
                 f.write(yaml_content)
                 yaml_file = f.name
             
@@ -327,29 +341,27 @@ class TestCLIMultiEndpoint:
                 ])
                 
                 assert result.exit_code == 0
-                assert "Prediction completed successfully" in result.output
-                mock_single_client.predict_from_yaml_file.assert_called_once()
+                assert "YAML prediction completed successfully" in result.output
+                mock_single_client.predict.assert_called_once()
             finally:
                 os.unlink(yaml_file)
     
     def test_yaml_multi_endpoint(self, cli_runner, mock_multi_endpoint_client):
         """Test yaml command with multiple endpoints."""
         with patch('boltz2_client.cli.create_client', return_value=mock_multi_endpoint_client):
-            mock_multi_endpoint_client.predict_from_yaml_file.return_value = Mock(
-                structures=["yaml_structure"],
-                confidence_scores=[0.83]
+            mock_multi_endpoint_client.predict.return_value = PredictionResponse(
+                structures=[StructureData(format="mmcif", structure="MOCK_CIF")],
+                confidence_scores=[0.83],
             )
             
             # Create temporary YAML file
             with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-                yaml_content = """
-                polymers:
-                  - id: A
-                    molecule_type: protein
-                    sequence: MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLAGG
-                recycling_steps: 3
-                sampling_steps: 50
-                """
+                yaml_content = """version: 1
+sequences:
+  - protein:
+      id: A
+      sequence: MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLAGG
+"""
                 f.write(yaml_content)
                 yaml_file = f.name
             
@@ -361,8 +373,8 @@ class TestCLIMultiEndpoint:
                 ])
                 
                 assert result.exit_code == 0
-                assert "Prediction completed successfully" in result.output
-                mock_multi_endpoint_client.predict_from_yaml_file.assert_called_once()
+                assert "YAML prediction completed successfully" in result.output
+                mock_multi_endpoint_client.predict.assert_called_once()
             finally:
                 os.unlink(yaml_file)
 
@@ -458,7 +470,8 @@ class TestCLIMultiEndpoint:
         ])
         
         # Should handle gracefully or show appropriate error
-        assert result.exit_code != 0 or "error" in result.output.lower()
+        out = result.output.lower()
+        assert result.exit_code != 0 or "error" in out or "unhealthy" in out
     
     def test_cli_missing_endpoints(self, cli_runner):
         """Test CLI with missing endpoints."""
@@ -469,7 +482,8 @@ class TestCLIMultiEndpoint:
         ])
         
         # Should handle gracefully or show appropriate error
-        assert result.exit_code != 0 or "error" in result.output.lower()
+        out = result.output.lower()
+        assert result.exit_code != 0 or "error" in out or "unhealthy" in out
 
     # Test 11: Environment Variable Support
     def test_cli_environment_variables(self, cli_runner):
@@ -487,7 +501,7 @@ class TestCLIMultiEndpoint:
     # Test 12: Integration with MultiEndpointClient
     def test_cli_creates_multi_endpoint_client(self, cli_runner):
         """Test that CLI creates MultiEndpointClient when --multi-endpoint is used."""
-        with patch('boltz2_client.cli.MultiEndpointClient') as mock_multi_client_class:
+        with patch('boltz2_client.multi_endpoint_client.MultiEndpointClient') as mock_multi_client_class:
             mock_multi_client_class.return_value = Mock()
             
             result = cli_runner.invoke(cli, [

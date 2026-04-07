@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# ---------------------------------------------------------------
+# Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
+# ---------------------------------------------------------------
+
 """
 Multi-Endpoint Virtual Screening Example
 
@@ -104,7 +108,7 @@ async def run_multi_endpoint_screening():
         def update_progress(completed: int, total: int):
             progress.update(task, completed=completed)
         
-        result = await vs.screen(
+        result = vs.screen(
             target_sequence=TARGET_SEQUENCE,
             compound_library=library,
             target_name="Example Target",

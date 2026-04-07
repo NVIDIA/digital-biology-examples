@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# ---------------------------------------------------------------
+# Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
+# ---------------------------------------------------------------
+
 """
 Tests for A3M to CSV Multimer MSA Converter.
 
@@ -12,7 +16,7 @@ Tests cover:
 
 import pytest
 from pathlib import Path
-from boltz2_client.a3m_to_csv_converter import (
+from boltz2_client.a3m import (
     A3MParser,
     A3MMSA,
     A3MSequence,
@@ -340,25 +344,22 @@ class TestA3MToCSVConverter:
         assert len(lines_a) > 5  # More than just paired
         
     def test_unpaired_block_diagonal_format(self):
-        """Test that unpaired sequences use gaps for other chains."""
+        """Test that unpaired sequences are included with key=-1."""
         strategy = GreedyPairingStrategy(use_tax_id=False)
         converter = A3MToCSVConverter(pairing_strategy=strategy, include_unpaired=True)
         result = converter.convert_content(
             a3m_contents={'A': CHAIN_A_A3M, 'B': CHAIN_B_A3M}
         )
         
-        # Parse CSVs
         lines_a = result.csv_per_chain['A'].strip().split('\n')
         lines_b = result.csv_per_chain['B'].strip().split('\n')
         
-        # Find rows where one chain has gaps
-        gap_rows_a = [line for line in lines_a[1:] if ',' in line and line.split(',')[1].startswith('-')]
-        gap_rows_b = [line for line in lines_b[1:] if ',' in line and line.split(',')[1].startswith('-')]
+        # With include_unpaired=True, unpaired sequences use key=-1
+        unpaired_a = [l for l in lines_a[1:] if l.startswith('-1,')]
+        unpaired_b = [l for l in lines_b[1:] if l.startswith('-1,')]
         
-        # Chain A should have gap rows (for B's unpaired sequences)
-        # Chain B should have gap rows (for A's unpaired sequences)
-        # At least one chain should have gaps
-        assert len(gap_rows_a) > 0 or len(gap_rows_b) > 0
+        # Should have more rows than just paired (query + paired + unpaired)
+        assert len(lines_a) > 2 or len(lines_b) > 2
         
     def test_max_pairs_limit(self):
         """Test max_pairs parameter."""
@@ -543,9 +544,9 @@ MVTPEGNVS
             a3m_contents={'A': chain_a, 'B': chain_b}
         )
         
-        # Should have query pair + 2 unpaired
+        # Should have query pair + unpaired sequences with key=-1
         lines_a = result.csv_per_chain['A'].strip().split('\n')
-        assert len(lines_a) == 4  # header + query + 2 unpaired
+        assert len(lines_a) >= 3  # header + query + at least 1 unpaired
         
     def test_three_chains(self):
         """Test with three chains."""

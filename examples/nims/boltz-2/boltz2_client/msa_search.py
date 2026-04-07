@@ -1,133 +1,261 @@
+# ---------------------------------------------------------------
+# Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
+# ---------------------------------------------------------------
+
 """
 MSA Search NIM Client for Boltz-2
 
-This module provides integration with NVIDIA's GPU-accelerated MSA Search NIM
-to generate Multiple Sequence Alignments for enhanced protein structure predictions.
+Provides integration with NVIDIA's GPU-accelerated MSA Search NIM (v2.3.0+)
+for monomer, paired (multimer), and structural-template searches.
 
-Copyright (c) 2025, NVIDIA CORPORATION. All rights reserved.
+Reference: https://docs.nvidia.com/nim/bionemo/msa-search/2.3.0/api-reference.html
+
+Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
 """
 
 import asyncio
+import warnings
 import aiohttp
 import os
-from typing import Dict, List, Optional, Union, Literal, Tuple, Any
+from typing import Dict, List, Optional, Union, Literal, Any
 from pathlib import Path
-from pydantic import BaseModel, Field, validator
-import json
-from datetime import datetime
+from pydantic import BaseModel, Field, field_validator
 import logging
 
 logger = logging.getLogger(__name__)
 
 
+# ── Monomer search models ────────────────────────────────────────────────────
+
+
 class MSASearchRequest(BaseModel):
-    """Request model for MSA Search NIM API."""
-    
+    """Request model for monomer MSA Search NIM API."""
+
     sequence: str = Field(..., description="Query protein sequence", max_length=4096)
     databases: Optional[List[str]] = Field(
         default=["all"],
-        description="List of database names to search against",
-        max_items=3
+        description="Database names to search (case-insensitive). Default searches all.",
     )
     e_value: Optional[float] = Field(
         default=0.0001,
-        description="E-value for filtering hits when building MSA",
+        description="E-value threshold for filtering hits",
         ge=0.0,
-        le=1.0
+        le=1.0,
     )
     iterations: Optional[int] = Field(
         default=1,
-        description="Number of MSA iterations to perform",
+        description="MSA iterations (ignored for colabfold search_type which uses 3)",
         ge=1,
-        le=6
+        le=6,
     )
     max_msa_sequences: Optional[int] = Field(
         default=500,
-        description="Maximum sequences taken from MSA",
+        description="Max sequences per database (server default NIM_GLOBAL_MAX_MSA_DEPTH=500)",
         ge=1,
-        le=10001
     )
     output_alignment_formats: Optional[List[str]] = Field(
         default=["a3m"],
-        description="Output format of the MSA"
-    )
-    override_database_order: Optional[bool] = Field(
-        default=False,
-        description="Override database rank order"
+        description='Output MSA formats: "a3m" and/or "fasta"',
     )
     search_type: Optional[Literal["colabfold", "alphafold2"]] = Field(
         default="colabfold",
-        description="Which type of MSA Search to run"
+        description="Search algorithm",
     )
-    
-    @validator('sequence')
+
+    @field_validator("sequence")
+    @classmethod
     def validate_sequence(cls, v):
-        """Validate protein sequence contains only valid amino acids."""
         valid_chars = set("ACDEFGHIKLMNPQRSTVWYX")
         sequence = v.upper().strip()
-        
         if not sequence:
             raise ValueError("Sequence cannot be empty")
-            
         invalid_chars = set(sequence) - valid_chars
         if invalid_chars:
-            raise ValueError(f"Invalid amino acid characters in sequence: {invalid_chars}")
-            
+            raise ValueError(f"Invalid characters in sequence: {invalid_chars}")
         return sequence
 
 
+# ── Paired search models (v2.1.0+) ──────────────────────────────────────────
+
+
+class PairedMSASearchRequest(BaseModel):
+    """Request model for the paired (multimer) MSA endpoint."""
+
+    sequences: Union[List[str], Dict[str, str]] = Field(
+        ..., description="Protein sequences (one per chain). List or {chain_id: seq}."
+    )
+    databases: Optional[List[str]] = Field(
+        default=["all"],
+        description="Databases with taxonomy info for species-based pairing",
+    )
+    e_value: Optional[float] = Field(default=0.0001, ge=0.0, le=1.0)
+    max_msa_sequences: Optional[int] = Field(default=500, ge=1)
+    pairing_strategy: Optional[Literal["greedy", "complete"]] = Field(
+        default="greedy",
+        description="'greedy' maximises rows; 'complete' requires all chains per species",
+    )
+    unpack: Optional[bool] = Field(
+        default=True,
+        description="True → per-chain output; False → raw concatenated output",
+    )
+
+
+class PairedMSASearchResponse(BaseModel):
+    """Response from the paired MSA search endpoint."""
+
+    alignments_by_chain: Dict[str, Dict[str, Dict[str, "AlignmentFileRecord"]]] = Field(
+        ..., description="Paired MSA keyed by chain_id → database → format"
+    )
+    metrics: Optional[Dict[str, Any]] = None
+
+
+# ── Structural template search models (v2.2.0+) ─────────────────────────────
+
+
+class StructuralTemplateRequest(BaseModel):
+    """Request model for structural template search endpoint."""
+
+    sequence: str = Field(..., max_length=4096)
+    structural_template_databases: Optional[List[str]] = Field(
+        default=["pdb70_220313"],
+        description="PDB databases to search for structural templates",
+    )
+    msa_databases: Optional[List[str]] = Field(
+        default=["all"],
+        description="Databases for MSA generation (first is used for profile)",
+    )
+    e_value: Optional[float] = Field(default=0.0001, ge=0.0, le=1.0)
+    max_structures: Optional[int] = Field(
+        default=20, description="Max PDB structures to return"
+    )
+    max_msa_sequences: Optional[int] = Field(default=500, ge=1)
+
+
+class SearchHitRecord(BaseModel):
+    hits: str = Field(..., description="Template hits in M8 (BLAST tabular) format")
+    format: str = Field(default="m8")
+
+
+class StructuralTemplate(BaseModel):
+    structure: str = Field(..., description="mmCIF file content")
+    format: str = Field(default="mmcif")
+
+
+class StructuralTemplateResponse(BaseModel):
+    """Response from the structural template search endpoint."""
+
+    alignments: Dict[str, Dict[str, "AlignmentFileRecord"]] = Field(
+        ..., description="MSA alignments [database][format]"
+    )
+    search_hits: Dict[str, Dict[str, SearchHitRecord]] = Field(
+        ..., description="Template hits [database][format]"
+    )
+    structures: Dict[str, StructuralTemplate] = Field(
+        ..., description="Retrieved PDB structures by PDB ID"
+    )
+    metrics: Optional[Dict[str, Any]] = None
+
+
+# ── Shared models ────────────────────────────────────────────────────────────
+
+
 class AlignmentFileRecord(BaseModel):
-    """Represents a single alignment file record."""
-    alignment: str = Field(..., description="The contents of a single MSA")
-    format: str = Field(..., description="The format of the alignment (a3m, fasta, or sto)")
+    """A single alignment file record returned by the MSA NIM."""
+    alignment: str = Field(..., description="MSA content")
+    format: str = Field(..., description='Format identifier ("a3m" or "fasta")')
 
 
 class MSASearchResponse(BaseModel):
-    """Response model from MSA Search NIM API."""
-    
+    """Response from the monomer MSA search endpoint."""
+
     alignments: Dict[str, Dict[str, AlignmentFileRecord]] = Field(
-        ..., 
-        description="Alignments as nested dictionary [database][format]"
-    )
-    templates: Optional[Dict[str, Dict[str, Any]]] = Field(
-        None,
-        description="Template hits if requested"
+        ..., description="Alignments as nested dictionary [database][format]"
     )
     metrics: Optional[Dict[str, Any]] = Field(
-        None,
-        description="Metrics for the MSA search"
+        None, description="Search metrics / debugging info"
     )
+
+
+# Rebuild models to resolve forward references
+PairedMSASearchResponse.model_rebuild()
+StructuralTemplateResponse.model_rebuild()
     
 
 class MSASearchClient:
-    """Client for interacting with MSA Search NIM endpoints."""
-    
+    """Client for NVIDIA MSA Search NIM (v2.3.0+).
+
+    Supports monomer, paired (multimer), and structural-template endpoints.
+    """
+
+    # Endpoint paths
+    _MONOMER_PATH = "/biology/colabfold/msa-search/predict"
+    _PAIRED_PATH = "/biology/colabfold/msa-search/paired/predict"
+    _TEMPLATE_PATH = "/biology/colabfold/msa-search/structure-templates/predict"
+    _DB_CONFIG_PATH = "/biology/colabfold/msa-search/config/msa-database-configs"
+    _METADATA_PATH = "/v1/metadata"
+    _HEALTH_PATH = "/v1/health/ready"
+
     def __init__(
         self,
         endpoint_url: str,
         api_key: Optional[str] = None,
         timeout: int = 300,
-        max_retries: int = 3
+        max_retries: int = 3,
     ):
-        """
-        Initialize MSA Search client.
-        
-        Args:
-            endpoint_url: MSA Search NIM endpoint URL
-            api_key: Optional API key for NVIDIA-hosted endpoints
-            timeout: Request timeout in seconds
-            max_retries: Maximum number of retry attempts
-        """
-        self.endpoint_url = endpoint_url.rstrip('/')
+        self.endpoint_url = endpoint_url.rstrip("/")
         self.api_key = api_key or os.environ.get("NVIDIA_API_KEY")
         self.timeout = timeout
         self.max_retries = max_retries
-        
-        # Set up headers
-        self.headers = {"Content-Type": "application/json"}
+
+        self.headers: Dict[str, str] = {"Content-Type": "application/json"}
         if self.api_key:
             self.headers["Authorization"] = f"Bearer {self.api_key}"
-    
+
+    # ── helpers ───────────────────────────────────────────────────────────
+
+    async def _post(self, path: str, payload: dict) -> dict:
+        """POST with retries + exponential backoff."""
+        async with aiohttp.ClientSession() as session:
+            for attempt in range(self.max_retries):
+                try:
+                    async with session.post(
+                        f"{self.endpoint_url}{path}",
+                        headers=self.headers,
+                        json=payload,
+                        timeout=aiohttp.ClientTimeout(total=self.timeout),
+                    ) as resp:
+                        if resp.status == 200:
+                            return await resp.json()
+                        error_text = await resp.text()
+                        if attempt == self.max_retries - 1:
+                            raise Exception(
+                                f"MSA Search failed: {resp.status} - {error_text}"
+                            )
+                except asyncio.TimeoutError:
+                    if attempt == self.max_retries - 1:
+                        raise Exception(
+                            f"MSA Search timed out after {self.timeout}s"
+                        )
+                except Exception:
+                    if attempt == self.max_retries - 1:
+                        raise
+                logger.warning("MSA Search attempt %d failed, retrying…", attempt + 1)
+                await asyncio.sleep(2**attempt)
+
+    async def _get(self, path: str, timeout: int = 30) -> Any:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"{self.endpoint_url}{path}",
+                headers=self.headers,
+                timeout=aiohttp.ClientTimeout(total=timeout),
+            ) as resp:
+                if resp.status == 200:
+                    return await resp.json()
+                error_text = await resp.text()
+                raise Exception(f"GET {path} failed: {resp.status} - {error_text}")
+
+    # ── monomer search ────────────────────────────────────────────────────
+
     async def search(
         self,
         sequence: str,
@@ -137,25 +265,9 @@ class MSASearchClient:
         iterations: int = 1,
         output_alignment_formats: Optional[List[str]] = None,
         search_type: str = "colabfold",
-        **kwargs
+        **kwargs,
     ) -> MSASearchResponse:
-        """
-        Perform MSA search for a protein sequence.
-        
-        Args:
-            sequence: Query protein sequence
-            databases: List of databases to search (default: ["all"])
-            e_value: E-value for filtering hits
-            max_msa_sequences: Maximum sequences taken from MSA
-            iterations: Number of MSA iterations
-            output_alignment_formats: Output formats (default: ["a3m"])
-            search_type: Search type ("colabfold" or "alphafold2")
-            **kwargs: Additional parameters to pass to the API
-            
-        Returns:
-            MSASearchResponse with search results
-        """
-        # Create request
+        """Monomer MSA search against ``/biology/colabfold/msa-search/predict``."""
         request = MSASearchRequest(
             sequence=sequence,
             databases=databases or ["all"],
@@ -163,99 +275,101 @@ class MSASearchClient:
             max_msa_sequences=max_msa_sequences,
             iterations=iterations,
             output_alignment_formats=output_alignment_formats or ["a3m"],
-            search_type=search_type
+            search_type=search_type,
         )
-        
-        # Prepare request payload
-        payload = request.dict(exclude_none=True)
-        payload.update(kwargs)  # Add any additional parameters
-        
-        # Make API request with retries
-        async with aiohttp.ClientSession() as session:
-            for attempt in range(self.max_retries):
-                try:
-                    async with session.post(
-                        f"{self.endpoint_url}/biology/colabfold/msa-search/predict",
-                        headers=self.headers,
-                        json=payload,
-                        timeout=aiohttp.ClientTimeout(total=self.timeout)
-                    ) as response:
-                        if response.status == 200:
-                            data = await response.json()
-                            return MSASearchResponse(**data)
-                        else:
-                            error_text = await response.text()
-                            if attempt == self.max_retries - 1:
-                                raise Exception(f"MSA Search failed: {response.status} - {error_text}")
-                            await asyncio.sleep(2 ** attempt)  # Exponential backoff
-                            
-                except asyncio.TimeoutError:
-                    if attempt == self.max_retries - 1:
-                        raise Exception(f"MSA Search timed out after {self.timeout} seconds")
-                    await asyncio.sleep(2 ** attempt)
-                    
-                except Exception as e:
-                    if attempt == self.max_retries - 1:
-                        raise
-                    logger.warning(f"MSA Search attempt {attempt + 1} failed: {e}")
-                    await asyncio.sleep(2 ** attempt)
-    
+        payload = request.model_dump(exclude_none=True)
+        payload.update(kwargs)
+        data = await self._post(self._MONOMER_PATH, payload)
+        return MSASearchResponse(**data)
+
+    # ── paired search (v2.1.0+) ───────────────────────────────────────────
+
+    async def paired_search(
+        self,
+        sequences: Union[List[str], Dict[str, str]],
+        databases: Optional[List[str]] = None,
+        e_value: float = 0.0001,
+        max_msa_sequences: int = 500,
+        pairing_strategy: Literal["greedy", "complete"] = "greedy",
+        unpack: bool = True,
+        **kwargs,
+    ) -> PairedMSASearchResponse:
+        """Paired MSA search for multimers.
+
+        Endpoint: ``/biology/colabfold/msa-search/paired/predict``
+
+        Args:
+            sequences: Protein sequences (list or {chain_id: seq}).
+            pairing_strategy: "greedy" (max rows) or "complete" (all chains).
+            unpack: True returns per-chain output; False returns raw combined.
+        """
+        request = PairedMSASearchRequest(
+            sequences=sequences,
+            databases=databases or ["all"],
+            e_value=e_value,
+            max_msa_sequences=max_msa_sequences,
+            pairing_strategy=pairing_strategy,
+            unpack=unpack,
+        )
+        payload = request.model_dump(exclude_none=True)
+        payload.update(kwargs)
+        data = await self._post(self._PAIRED_PATH, payload)
+        return PairedMSASearchResponse(**data)
+
+    # ── structural template search (v2.2.0+) ─────────────────────────────
+
+    async def template_search(
+        self,
+        sequence: str,
+        structural_template_databases: Optional[List[str]] = None,
+        msa_databases: Optional[List[str]] = None,
+        e_value: float = 0.0001,
+        max_structures: int = 20,
+        max_msa_sequences: int = 500,
+        **kwargs,
+    ) -> StructuralTemplateResponse:
+        """Structural template search for finding homologous PDB structures.
+
+        Endpoint: ``/biology/colabfold/msa-search/structure-templates/predict``
+        """
+        request = StructuralTemplateRequest(
+            sequence=sequence,
+            structural_template_databases=structural_template_databases or ["pdb70_220313"],
+            msa_databases=msa_databases or ["all"],
+            e_value=e_value,
+            max_structures=max_structures,
+            max_msa_sequences=max_msa_sequences,
+        )
+        payload = request.model_dump(exclude_none=True)
+        payload.update(kwargs)
+        data = await self._post(self._TEMPLATE_PATH, payload)
+        return StructuralTemplateResponse(**data)
+
+    # ── metadata / config ─────────────────────────────────────────────────
+
+    async def get_metadata(self) -> Dict[str, Any]:
+        """Get NIM metadata from ``/v1/metadata`` (preferred over get_databases)."""
+        return await self._get(self._METADATA_PATH)
+
     async def get_databases(self) -> Dict[str, Any]:
+        """Get database configurations (deprecated in MSA NIM v2.2.0+).
+
+        Prefer :meth:`get_metadata` which uses ``/v1/metadata``.
         """
-        Get MSA database configurations from the MSA Search NIM.
-        
-        Returns:
-            Dictionary of database configurations
-        """
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"{self.endpoint_url}/biology/colabfold/msa-search/config/msa-database-configs",
-                headers=self.headers,
-                timeout=aiohttp.ClientTimeout(total=30)
-            ) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    return data
-                else:
-                    error_text = await response.text()
-                    raise Exception(f"Failed to get database configs: {response.status} - {error_text}")
-    
-    async def get_databases_status(self) -> Dict[str, Any]:
-        """
-        Get status of MSA databases.
-        
-        Returns:
-            Dictionary of database status information
-        """
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"{self.endpoint_url}/biology/colabfold/msa-search/databases/status",
-                headers=self.headers,
-                timeout=aiohttp.ClientTimeout(total=30)
-            ) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    return data
-                else:
-                    error_text = await response.text()
-                    raise Exception(f"Failed to get database status: {response.status} - {error_text}")
-    
+        warnings.warn(
+            "get_databases() uses the deprecated /config/msa-database-configs "
+            "endpoint. Use get_metadata() instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return await self._get(self._DB_CONFIG_PATH)
+
     async def health_check(self) -> bool:
-        """
-        Check if the MSA Search NIM endpoint is healthy.
-        
-        Returns:
-            True if healthy, False otherwise
-        """
+        """Return True if the MSA NIM is ready."""
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    f"{self.endpoint_url}/v1/health/ready",
-                    headers=self.headers,
-                    timeout=aiohttp.ClientTimeout(total=10)
-                ) as response:
-                    return response.status == 200
-        except:
+            await self._get(self._HEALTH_PATH, timeout=10)
+            return True
+        except Exception:
             return False
 
 
@@ -267,15 +381,16 @@ class MSAFormatConverter:
         response: MSASearchResponse,
         format: str = "a3m"
     ) -> Optional[str]:
-        """
-        Extract alignment content from MSA search response.
-        
+        """Extract alignment content from an MSA search response.
+
         Args:
-            response: MSA search response
-            format: Format to extract (a3m, fasta, sto)
-            
+            response: MSA search response (monomer or template).
+            format: Requested format key (``"a3m"`` or ``"fasta"``).
+
         Returns:
-            Alignment content string or None if not found
+            Alignment content string, or the first available format
+            if the requested one is absent.  ``None`` only when there
+            are no alignments at all.
         """
         # Search through all databases for the requested format
         for db_name, formats in response.alignments.items():
@@ -326,7 +441,7 @@ class MSASearchIntegration:
         self,
         sequence: str,
         output_path: Union[str, Path],
-        output_format: Literal["a3m", "fasta", "sto"] = "a3m",
+        output_format: Literal["a3m", "fasta"] = "a3m",
         databases: Optional[List[str]] = None,
         e_value: float = 0.0001,
         max_msa_sequences: int = 500,
@@ -428,7 +543,7 @@ class MSASearchIntegration:
         self,
         sequences: Dict[str, str],
         output_dir: Union[str, Path],
-        output_format: Literal["a3m", "fasta", "sto"] = "a3m",
+        output_format: Literal["a3m", "fasta"] = "a3m",
         databases: Optional[List[str]] = None,
         e_value: float = 0.0001,
         max_msa_sequences: int = 500,

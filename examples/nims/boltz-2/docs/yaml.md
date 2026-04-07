@@ -1,6 +1,6 @@
 # YAML Configuration Guide for Boltz-2 Python Client
 
-Copyright (c) 2025, NVIDIA CORPORATION. All rights reserved.
+Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
 
 This guide explains how to use YAML configuration files with the Boltz-2 Python Client, following the official Boltz repository format.
 
@@ -177,9 +177,9 @@ boltz2 yaml config.yaml --output-dir ./results
 ```
 
 #### Available CLI Parameters
-- `--recycling-steps` (1-6): Number of recycling steps (default: 3)
+- `--recycling-steps` (1-10): Number of recycling steps (default: 3)
 - `--sampling-steps` (10-1000): Number of sampling steps (default: 50)
-- `--diffusion-samples` (1-5): Number of diffusion samples (default: 1)
+- `--diffusion-samples` (1-25): Number of diffusion samples (default: 1)
 - `--step-scale` (0.5-5.0): Step scale for diffusion sampling (default: 1.638)
 - `--msa-dir`: Directory containing MSA files (default: same as YAML file)
 - `--output-dir`: Output directory for results (default: current directory)
@@ -205,6 +205,10 @@ asyncio.run(predict_from_yaml())
 
 #### Load from String
 ```python
+from boltz2_client import Boltz2SyncClient
+
+client = Boltz2SyncClient(base_url="http://localhost:8000")
+
 yaml_content = """
 version: 1
 sequences:
@@ -216,12 +220,11 @@ sequences:
       smiles: "CC(=O)O"
 """
 
-result = await client.predict_from_yaml_config(yaml_content)
+result = client.predict_from_yaml_config(yaml_content)
 ```
 
 #### Create Programmatically
 ```python
-# Create YAML config programmatically
 config = client.create_yaml_config(
     proteins=[("A", "MKTVRQERLK...", "protein_A.a3m")],
     ligands=[("B", "CC(=O)O")],
@@ -229,11 +232,9 @@ config = client.create_yaml_config(
     binder_id="B"
 )
 
-# Save to file
 client.save_yaml_config(config, "my_config.yaml")
 
-# Run prediction
-result = await client.predict_from_yaml_config(config)
+result = client.predict_from_yaml_config(config)
 ```
 
 ### 3. Endpoint Configuration
@@ -269,8 +270,9 @@ done
 
 ### Custom MSA Handling
 ```python
-# Load YAML with custom MSA directory
-result = await client.predict_from_yaml_config(
+from pathlib import Path
+
+result = client.predict_from_yaml_config(
     "config.yaml",
     msa_dir=Path("/custom/msa/directory")
 )

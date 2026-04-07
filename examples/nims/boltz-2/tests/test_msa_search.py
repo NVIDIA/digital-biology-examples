@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------
+# Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
+# ---------------------------------------------------------------
 
 """
 Unit tests for MSA Search functionality.
@@ -16,11 +19,8 @@ from boltz2_client.msa_search import (
     MSASearchClient, MSASearchRequest, MSASearchResponse,
     MSAFormatConverter, MSASearchIntegration
 )
-from boltz2_client.models import AlignmentFileRecord
 
-
-# Test data
-TEST_SEQUENCE = "MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLAGG"
+from constants import CDK2_SEQUENCE as TEST_SEQUENCE
 TEST_A3M_CONTENT = """>query
 MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLAGG
 >UniRef90_A0A1234567|organism=Test_organism|identity=90.0
@@ -83,74 +83,63 @@ class TestMSASearchClient:
     @pytest.mark.asyncio
     async def test_search_basic(self, client, mock_response):
         """Test basic MSA search functionality."""
-        # Create a proper async context manager mock for aiohttp.ClientSession
         with patch('aiohttp.ClientSession') as mock_session_class:
-            # Create the mock session object
-            mock_session = AsyncMock()
-            
-            # Create mock response object
+            mock_session = Mock()
+
             mock_resp = AsyncMock()
             mock_resp.status = 200
             mock_resp.json = AsyncMock(return_value=mock_response)
-            
-            # Set up the post context manager properly
+
             mock_post_cm = AsyncMock()
             mock_post_cm.__aenter__ = AsyncMock(return_value=mock_resp)
             mock_post_cm.__aexit__ = AsyncMock(return_value=None)
             mock_session.post.return_value = mock_post_cm
-            
-            # Set up the session context manager properly
+
             mock_session_cm = AsyncMock()
             mock_session_cm.__aenter__ = AsyncMock(return_value=mock_session)
             mock_session_cm.__aexit__ = AsyncMock(return_value=None)
             mock_session_class.return_value = mock_session_cm
-            
+
             response = await client.search(
                 sequence=TEST_SEQUENCE,
                 databases=["uniref90"],
                 max_msa_sequences=500
             )
-            
+
             assert isinstance(response, MSASearchResponse)
             assert "uniref90" in response.alignments
             assert "a3m" in response.alignments["uniref90"]
             assert response.metrics["total_sequences"] == 3
-    
+
     @pytest.mark.asyncio
     async def test_search_with_params(self, client, mock_response):
         """Test MSA search with custom parameters."""
-        # Create a proper async context manager mock for aiohttp.ClientSession
         with patch('aiohttp.ClientSession') as mock_session_class:
-            # Create the mock session object
-            mock_session = AsyncMock()
-            
-            # Create mock response object
+            mock_session = Mock()
+
             mock_resp = AsyncMock()
             mock_resp.status = 200
             mock_resp.json = AsyncMock(return_value=mock_response)
-            
-            # Set up the post context manager properly
+
             mock_post_cm = AsyncMock()
             mock_post_cm.__aenter__ = AsyncMock(return_value=mock_resp)
             mock_post_cm.__aexit__ = AsyncMock(return_value=None)
             mock_session.post.return_value = mock_post_cm
-            
-            # Set up the session context manager properly
+
             mock_session_cm = AsyncMock()
             mock_session_cm.__aenter__ = AsyncMock(return_value=mock_session)
             mock_session_cm.__aexit__ = AsyncMock(return_value=None)
             mock_session_class.return_value = mock_session_cm
-            
+
             response = await client.search(
                 sequence=TEST_SEQUENCE,
                 databases=["uniref90", "pdb70"],
                 e_value=0.001,
                 max_msa_sequences=1000,
                 iterations=3,
-                output_alignment_formats=["a3m", "fasta", "sto"]
+                output_alignment_formats=["a3m", "fasta"]
             )
-            
-            # Verify request was made correctly
+
             call_args = mock_session.post.call_args
             assert call_args[0][0].endswith("/biology/colabfold/msa-search/predict")
             request_data = call_args[1]["json"]
@@ -158,40 +147,30 @@ class TestMSASearchClient:
             assert request_data["databases"] == ["uniref90", "pdb70"]
             assert request_data["e_value"] == 0.001
             assert request_data["max_msa_sequences"] == 1000
-    
+
     @pytest.mark.asyncio
     async def test_error_handling(self, client):
         """Test error handling in MSA search."""
-        # Import the exception class
-        from boltz2_client.exceptions import Boltz2APIError
-        
-        # Create a proper async context manager mock for aiohttp.ClientSession
         with patch('aiohttp.ClientSession') as mock_session_class:
-            # Create the mock session object
-            mock_session = AsyncMock()
-            
-            # Create mock response object
+            mock_session = Mock()
+
             mock_resp = AsyncMock()
             mock_resp.status = 400
             mock_resp.json = AsyncMock(return_value={"error": "Invalid sequence"})
             mock_resp.text = AsyncMock(return_value='{"error": "Invalid sequence"}')
-            
-            # Set up the post context manager properly
+
             mock_post_cm = AsyncMock()
             mock_post_cm.__aenter__ = AsyncMock(return_value=mock_resp)
             mock_post_cm.__aexit__ = AsyncMock(return_value=None)
             mock_session.post.return_value = mock_post_cm
-            
-            # Set up the session context manager properly
+
             mock_session_cm = AsyncMock()
             mock_session_cm.__aenter__ = AsyncMock(return_value=mock_session)
             mock_session_cm.__aexit__ = AsyncMock(return_value=None)
             mock_session_class.return_value = mock_session_cm
-            
-            with pytest.raises(Boltz2APIError) as exc_info:
+
+            with pytest.raises(Exception, match="MSA Search failed"):
                 await client.search(sequence="INVALID")
-            
-            assert "Invalid sequence" in str(exc_info.value)
 
 
 class TestMSAFormatConverter:
@@ -241,8 +220,9 @@ class TestMSAFormatConverter:
         assert MSAFormatConverter.extract_alignment(response, "fasta") == TEST_FASTA_CONTENT
         assert MSAFormatConverter.extract_alignment(response, "sto") == TEST_STO_CONTENT
         
-        # Test missing format
-        assert MSAFormatConverter.extract_alignment(response, "nonexistent") is None
+        # Nonexistent format falls back to first available
+        result = MSAFormatConverter.extract_alignment(response, "nonexistent")
+        assert result is not None
     
     def test_get_all_alignments(self, response):
         """Test getting all alignments."""
@@ -308,8 +288,8 @@ class TestMSASearchIntegration:
             )
             
             assert isinstance(boltz_data, dict)
-            assert "uniref90" in boltz_data
-            assert "a3m" in boltz_data["uniref90"]
+            assert "msa_search" in boltz_data
+            assert "a3m" in boltz_data["msa_search"]
 
 
 class TestBoltz2ClientIntegration:

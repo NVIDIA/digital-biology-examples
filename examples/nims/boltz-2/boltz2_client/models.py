@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------
-# Copyright (c) 2025, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
 # ---------------------------------------------------------------
 
 
@@ -12,26 +12,59 @@ available parameters and features.
 """
 
 from typing import List, Optional, Dict, Any, Literal, Union
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator, ValidationInfo
 from datetime import datetime
 import re
-from .models_affinity import AffinityPrediction
+
+
+class AffinityPrediction(BaseModel):
+    """Affinity prediction results for a ligand."""
+    
+    affinity_pred_value: List[float] = Field(
+        ..., description="The predicted log(IC50) values"
+    )
+    affinity_probability_binary: List[float] = Field(
+        ..., description="The binary affinity prediction probability (0-1)"
+    )
+    model_1_affinity_pred_value: List[float] = Field(
+        ..., description="The predicted log(IC50) from Model 1"
+    )
+    model_1_affinity_probability_binary: List[float] = Field(
+        ..., description="The binary affinity prediction probability from Model 1"
+    )
+    model_2_affinity_pred_value: List[float] = Field(
+        ..., description="The predicted log(IC50) from Model 2"
+    )
+    model_2_affinity_probability_binary: List[float] = Field(
+        ..., description="The binary affinity prediction probability from Model 2"
+    )
+    affinity_pic50: List[float] = Field(
+        ..., description="Predicted pIC50 binding affinity (-log10 of IC50 in molar)"
+    )
 
 
 class Modification(BaseModel):
-    """Represents a molecular modification."""
-    type: str = Field(..., description="Type of modification")
-    position: int = Field(..., description="Position of modification")
-    details: Optional[Dict[str, Any]] = Field(None, description="Additional modification details")
+    """Represents a chemical modification to a polymer chain."""
+    ccd: str = Field(..., description="The Chemical Component Dictionary (CCD) ID of the modification (1-5 uppercase letters/numbers)")
+    position: int = Field(..., gt=0, description="The 1-based index of the residue to modify")
+    
+    @field_validator('ccd')
+    @classmethod
+    def validate_ccd(cls, v):
+        """Validate CCD code format."""
+        if not re.match(r'^[A-Z0-9]{1,5}$', v):
+            raise ValueError("CCD code must be 1-5 uppercase letters/numbers")
+        return v
 
 
 class AlignmentFileRecord(BaseModel):
     """Represents a single alignment file record."""
     alignment: str = Field(..., description="Raw alignment file content as string")
     format: Literal["sto", "a3m", "csv", "fasta"] = Field(..., description="Alignment file format")
-    rank: int = Field(-1, description="Integer rank to define ordering of alignments")
+    rank: Optional[int] = Field(-1, description="Integer rank to define ordering of alignments")
     
-    @validator('alignment')
+    @field_validator('alignment')
+    @classmethod
     def validate_alignment_content(cls, v):
         """Validate alignment content is not empty."""
         if not v.strip():
@@ -39,100 +72,140 @@ class AlignmentFileRecord(BaseModel):
         return v
 
 
+class StructuralTemplate(BaseModel):
+    """A structural template to guide protein structure prediction."""
+    structure: str = Field(..., min_length=1, description="The template structure content in CIF or PDB format")
+    format: Literal["cif", "pdb"] = Field("cif", description="Format of the structure (cif or pdb)")
+    name: Optional[str] = Field(None, description="Optional name for the template (max 64 chars, alphanumeric with -_)")
+    chain_id: Optional[str] = Field(None, description="Optional chain ID to use from the template structure (1-4 alphanumeric)")
+    
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v):
+        """Validate template name format."""
+        if v is not None:
+            if len(v) > 64:
+                raise ValueError("Template name must be 64 characters or less")
+            if not re.match(r'^[A-Za-z0-9_-]+$', v):
+                raise ValueError("Template name must contain only alphanumeric characters, underscores, and hyphens")
+        return v
+    
+    @field_validator('chain_id')
+    @classmethod
+    def validate_chain_id(cls, v):
+        """Validate chain ID format."""
+        if v is not None:
+            if not re.match(r'^[A-Za-z0-9]{1,4}$', v):
+                raise ValueError("Chain ID must be 1-4 alphanumeric characters")
+        return v
+
+
 class Polymer(BaseModel):
     """Represents a polymer (protein, DNA, or RNA) in the prediction request."""
     
-    id: str = Field(..., description="Unique identifier for the polymer (A-Z or 4 alphanumeric chars)")
+    id: Optional[str] = Field(None, description="Unique identifier for the polymer (1-4 alphanumeric chars)")
     molecule_type: Literal["protein", "dna", "rna"] = Field(..., description="Type of molecule")
-    sequence: str = Field(..., description="Sequence string")
-    cyclic: bool = Field(False, description="Whether the polymer is cyclic")
-    modifications: List[Modification] = Field(default_factory=list, description="List of modifications")
+    sequence: str = Field(..., max_length=4096, description="Sequence string (max 4096 characters)")
+    cyclic: Optional[bool] = Field(False, description="Whether the polymer is cyclic")
+    modifications: Optional[List[Modification]] = Field(default_factory=list, description="List of modifications")
     msa: Optional[Dict[str, Dict[str, AlignmentFileRecord]]] = Field(None, description="A Dictionary [database_name -> [format -> AlignmentFileRecord]] containing alignments")
+    structural_templates: Optional[List[StructuralTemplate]] = Field(None, description="Structural templates to guide prediction (max 4, protein only)")
     
-    @validator('sequence')
-    def validate_sequence(cls, v, values):
+    @field_validator('sequence')
+    @classmethod
+    def validate_sequence(cls, v, info: ValidationInfo):
         """Validate sequence based on molecule type."""
-        if 'molecule_type' not in values:
+        molecule_type = info.data.get('molecule_type')
+        if molecule_type is None:
             return v
-            
-        molecule_type = values['molecule_type']
         
         if molecule_type == "protein":
-            # Standard amino acid codes
             valid_chars = set("ACDEFGHIKLMNPQRSTVWY")
             if not all(c.upper() in valid_chars for c in v):
                 raise ValueError(f"Invalid amino acid characters in protein sequence: {v}")
         elif molecule_type == "dna":
-            # Standard DNA bases
             valid_chars = set("ATCG")
             if not all(c.upper() in valid_chars for c in v):
                 raise ValueError(f"Invalid DNA base characters in sequence: {v}")
         elif molecule_type == "rna":
-            # Standard RNA bases
             valid_chars = set("AUCG")
             if not all(c.upper() in valid_chars for c in v):
                 raise ValueError(f"Invalid RNA base characters in sequence: {v}")
         
         return v.upper()
     
-    @validator('id')
+    @field_validator('id')
+    @classmethod
     def validate_id(cls, v):
-        """Validate polymer ID format (single letter A-Z or 4 alphanumeric chars)."""
-        if re.match(r'^[A-Z]$', v):
-            return v  # Single letter A-Z
-        elif re.match(r'^[A-Za-z0-9]{4}$', v):
-            return v  # 4 alphanumeric characters
-        else:
-            raise ValueError("Polymer ID must be either a single letter (A-Z) or 4 alphanumeric characters")
+        """Validate polymer ID format (1-4 alphanumeric characters)."""
+        if v is not None:
+            if not re.match(r'^[A-Za-z0-9]{1,4}$', v):
+                raise ValueError("Polymer ID must be 1-4 alphanumeric characters")
+        return v
+    
+    @field_validator('structural_templates')
+    @classmethod
+    def validate_structural_templates(cls, v, info: ValidationInfo):
+        """Validate structural templates."""
+        if v is not None:
+            if len(v) > 4:
+                raise ValueError("Maximum 4 structural templates allowed")
+            molecule_type = info.data.get('molecule_type')
+            if molecule_type and molecule_type != "protein":
+                raise ValueError("Structural templates are only allowed for protein molecules")
+        return v
 
 
 class Ligand(BaseModel):
     """Represents a ligand in the prediction request."""
     
-    id: str = Field(..., description="Unique identifier for the ligand")
+    id: Optional[str] = Field(None, description="Chain ID for the ligand")
     smiles: Optional[str] = Field(None, description="SMILES string representation")
-    ccd: Optional[str] = Field(None, description="Chemical Component Dictionary (CCD) code")
+    ccd: Optional[str] = Field(None, description="Chemical Component Dictionary (CCD) code (1-5 uppercase letters/numbers)")
     predict_affinity: Optional[bool] = Field(False, description="Run affinity prediction for this ligand. Note: only one ligand per request can have this enabled")
     
-    @validator('smiles')
+    @field_validator('smiles')
+    @classmethod
     def validate_smiles(cls, v):
         """Basic SMILES validation."""
         if v is not None:
             if not v.strip():
                 raise ValueError("SMILES string cannot be empty")
-            # Basic character validation - could be enhanced with RDKit
             if any(char in v for char in [' ', '\t', '\n']):
                 raise ValueError("SMILES string should not contain whitespace")
             return v.strip()
         return v
     
-    @validator('ccd')
+    @field_validator('ccd')
+    @classmethod
     def validate_ccd(cls, v):
         """Basic CCD code validation."""
         if v is not None:
             if not v.strip():
                 raise ValueError("CCD code cannot be empty")
-            # CCD codes are typically 3-4 character alphanumeric codes
-            if not re.match(r'^[A-Za-z0-9]{2,4}$', v.strip()):
-                raise ValueError("CCD code must be 2-4 alphanumeric characters")
+            if not re.match(r'^[A-Z0-9]{1,5}$', v.strip().upper()):
+                raise ValueError("CCD code must be 1-5 uppercase letters/numbers")
             return v.strip().upper()
         return v
     
-    @validator('ccd', always=True)
-    def validate_smiles_or_ccd(cls, v, values):
+    @field_validator('ccd')
+    @classmethod
+    def validate_smiles_or_ccd(cls, v, info: ValidationInfo):
         """Ensure either SMILES or CCD is provided, but not both."""
-        smiles = values.get('smiles')
+        smiles = info.data.get('smiles')
         if smiles and v:
             raise ValueError("Cannot specify both SMILES and CCD code")
         if not smiles and not v:
             raise ValueError("Must specify either SMILES or CCD code")
         return v
     
-    @validator('id')
+    @field_validator('id')
+    @classmethod
     def validate_id(cls, v):
         """Validate ligand ID format."""
-        if not re.match(r'^[A-Za-z0-9_-]+$', v):
-            raise ValueError("Ligand ID must contain only alphanumeric characters, underscores, and hyphens")
+        if v is not None:
+            if not re.match(r'^[A-Za-z0-9_-]+$', v):
+                raise ValueError("Ligand ID must contain only alphanumeric characters, underscores, and hyphens")
         return v
 
 
@@ -142,12 +215,11 @@ class Atom(BaseModel):
     residue_index: int = Field(..., description="Residue index (1-based)")
     atom_name: str = Field(..., description="Atom name (e.g., 'CA', 'SG', 'C22')")
     
-    @validator('id')
+    @field_validator('id')
+    @classmethod
     def validate_id(cls, v):
         """Validate atom ID format to match server-side validation."""
         if v is not None:
-            # Server pattern: ^([A-Z]+|[A-Za-z0-9]{4})$
-            # One or more letters (A-Z+) OR exactly 4 alphanumeric characters
             if re.match(r'^[A-Z]+$', v) or re.match(r'^[A-Za-z0-9]{4}$', v):
                 return v
             else:
@@ -155,14 +227,17 @@ class Atom(BaseModel):
         return v
 
 
+class Contact(BaseModel):
+    """Represents a contact residue in a pocket constraint."""
+    id: Optional[str] = Field(None, description="Chain identifier for the contact")
+    residue_index: int = Field(..., description="1-based index of the residue in the binding site")
+
+
 class PocketConstraint(BaseModel):
-    """Represents a pocket constraint."""
+    """Represents a pocket constraint defining a binding site."""
     constraint_type: str = Field("pocket", description="Type of constraint")
-    ligand_id: str = Field(..., description="ID of the ligand")
-    polymer_id: str = Field(..., description="ID of the polymer")
-    residue_ids: List[int] = Field(..., description="List of residue IDs defining the pocket")
-    binder: str = Field(..., description="ID of the binding molecule")
-    contacts: List[int] = Field(default_factory=list, description="Contact residue indices")
+    binder: str = Field(..., description="ID of the binding molecule (e.g. ligand chain ID)")
+    contacts: List[Contact] = Field(..., description="List of contacts defining the pocket")
 
 
 class BondConstraint(BaseModel):
@@ -170,7 +245,8 @@ class BondConstraint(BaseModel):
     constraint_type: str = Field("bond", description="Type of constraint")
     atoms: List[Atom] = Field(..., description="List of atoms involved in the bond (exactly 2)")
     
-    @validator('atoms')
+    @field_validator('atoms')
+    @classmethod
     def validate_atoms_count(cls, v):
         """Validate that exactly 2 atoms are specified for a bond."""
         if len(v) != 2:
@@ -182,10 +258,10 @@ class PredictionRequest(BaseModel):
     """Complete prediction request model with all available Boltz-2 parameters."""
     
     # Required parameters
-    polymers: List[Polymer] = Field(..., description="List of polymers (DNA, RNA, or Protein) - max 5, min 1")
+    polymers: List[Polymer] = Field(..., description="List of polymers (DNA, RNA, or Protein) - max 12, min 1")
     
     # Optional molecular components
-    ligands: Optional[List[Ligand]] = Field(None, description="List of ligands - max 5, min 0")
+    ligands: Optional[List[Ligand]] = Field(None, description="List of ligands - max 20, min 0")
     
     # Constraints
     constraints: Optional[List[Union[PocketConstraint, BondConstraint]]] = Field(
@@ -194,16 +270,16 @@ class PredictionRequest(BaseModel):
     
     # Diffusion and sampling parameters
     recycling_steps: Optional[int] = Field(
-        3, ge=1, le=6, 
-        description="The number of recycling steps to use for prediction (1-6, default: 3)"
+        3, ge=1, le=10, 
+        description="The number of recycling steps to use for prediction (1-10, default: 3)"
     )
     sampling_steps: Optional[int] = Field(
         50, ge=10, le=1000,
         description="The number of sampling steps to use for prediction (10-1000, default: 50)"
     )
     diffusion_samples: Optional[int] = Field(
-        1, ge=1, le=5,
-        description="The number of diffusion samples to use for prediction (1-5, default: 1)"
+        1, ge=1, le=25,
+        description="The number of diffusion samples to use for prediction (1-25, default: 1)"
     )
     step_scale: Optional[float] = Field(
         1.638, ge=0.5, le=5.0,
@@ -238,29 +314,40 @@ class PredictionRequest(BaseModel):
         description="Whether to add Molecular Weight correction to the affinity prediction (default: False)"
     )
     
-    @validator('polymers')
+    # PAE/PDE output parameters (v1.5+)
+    write_full_pae: Optional[bool] = Field(
+        False,
+        description="Whether to save the full PAE (Predicted Aligned Error) matrix in the response (default: False)"
+    )
+    write_full_pde: Optional[bool] = Field(
+        False,
+        description="Whether to save the full PDE (Predicted Distance Error) matrix in the response (default: False)"
+    )
+    
+    @field_validator('polymers')
+    @classmethod
     def validate_polymers_count(cls, v):
         """Validate polymer count."""
-        if len(v) > 5:
-            raise ValueError("Maximum 5 polymers allowed")
+        if len(v) > 12:
+            raise ValueError("Maximum 12 polymers allowed")
         if len(v) == 0:
             raise ValueError("At least 1 polymer required")
         return v
     
-    @validator('ligands')
+    @field_validator('ligands')
+    @classmethod
     def validate_ligands_count(cls, v):
         """Validate ligand count and affinity prediction constraints."""
         if v is not None:
-            if len(v) > 5:
-                raise ValueError("Maximum 5 ligands allowed")
-            
-            # Check that only one ligand has predict_affinity=True
+            if len(v) > 20:
+                raise ValueError("Maximum 20 ligands allowed")
             affinity_ligands = [lig for lig in v if getattr(lig, 'predict_affinity', False)]
             if len(affinity_ligands) > 1:
                 raise ValueError("Only one ligand per request can have predict_affinity=True")
         return v
     
-    @validator('constraints')
+    @field_validator('constraints')
+    @classmethod
     def validate_constraints(cls, v):
         """Validate constraints format."""
         if v is not None:
@@ -306,7 +393,18 @@ class PredictionResponse(BaseModel):
     chains_ptm_scores: Optional[List[float]] = Field(None, description="Predicted TM score within each chain")
     pair_chains_iptm_scores: Optional[List[Dict[str, Any]]] = Field(None, description="Predicted TM score between each pair of chains")
     
-    @validator('structures')
+    # Full error matrices (v1.5+)
+    pae: Optional[List[List[List[float]]]] = Field(
+        None, 
+        description="Full PAE (Predicted Aligned Error) matrix. Shape: [num_models, num_residues, num_residues]"
+    )
+    pde: Optional[List[List[List[float]]]] = Field(
+        None, 
+        description="Full PDE (Predicted Distance Error) matrix. Shape: [num_models, num_residues, num_residues]"
+    )
+    
+    @field_validator('structures')
+    @classmethod
     def validate_structures(cls, v):
         """Validate structures list."""
         if len(v) == 0:
@@ -393,10 +491,11 @@ class YAMLSequence(BaseModel):
     protein: Optional[YAMLProtein] = Field(None, description="Protein configuration")
     ligand: Optional[YAMLLigand] = Field(None, description="Ligand configuration")
     
-    @validator('ligand', always=True)
-    def validate_protein_or_ligand(cls, v, values):
+    @field_validator('ligand')
+    @classmethod
+    def validate_protein_or_ligand(cls, v, info: ValidationInfo):
         """Ensure either protein or ligand is specified, but not both."""
-        protein = values.get('protein')
+        protein = info.data.get('protein')
         if protein and v:
             raise ValueError("Cannot specify both protein and ligand in the same sequence entry")
         if not protein and not v:
@@ -420,7 +519,8 @@ class YAMLConfig(BaseModel):
     sequences: List[YAMLSequence] = Field(..., description="List of sequences (proteins and ligands)")
     properties: Optional[YAMLProperties] = Field(None, description="Properties to predict")
     
-    @validator('sequences')
+    @field_validator('sequences')
+    @classmethod
     def validate_sequences(cls, v):
         """Validate sequences list."""
         if len(v) == 0:
