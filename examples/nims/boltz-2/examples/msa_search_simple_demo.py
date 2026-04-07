@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# ---------------------------------------------------------------
+# Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
+# ---------------------------------------------------------------
+
 """
 Simple MSA Search Demo
 

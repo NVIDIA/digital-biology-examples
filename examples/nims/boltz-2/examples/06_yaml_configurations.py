@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# ---------------------------------------------------------------
+# Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
+# ---------------------------------------------------------------
+
 """
 Example 6: YAML Configuration Usage
 
@@ -101,9 +105,9 @@ async def load_existing_yaml_files():
     
     # List of example YAML files to test
     yaml_files = [
-        "examples/protein_ligand.yaml",
-        "examples/sars_cov2_mpro_nirmatrelvir.yaml",
-        "examples/multi_protein_complex.yaml"
+        "examples/data/protein_ligand.yaml",
+        "examples/data/sars_cov2_mpro_nirmatrelvir.yaml",
+        "examples/data/multi_protein_complex.yaml"
     ]
     
     for yaml_file in yaml_files:

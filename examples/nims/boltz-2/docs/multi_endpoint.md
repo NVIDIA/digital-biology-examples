@@ -1,6 +1,10 @@
 # Multi-Endpoint Virtual Screening Guide
 
+Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
+
 This guide explains how to use multiple Boltz-2 NIM endpoints for parallelized virtual screening with the boltz2-python-client.
+
+**Endpoint types:** In addition to local URLs and NVIDIA hosted endpoints, a single `Boltz2Client` can target an **AWS SageMaker** deployed model using `endpoint_type="sagemaker"` with `sagemaker_endpoint_name` (and optional `sagemaker_region`). SageMaker is typically used as a dedicated endpoint entry in `EndpointConfig` when mixing infrastructure; see [Mixed endpoint types](#mixed-endpoint-types) below.
 
 ## Overview
 
@@ -90,10 +94,10 @@ endpoints = [
     ),
 ]
 
-# Create multi-endpoint client
+# Create multi-endpoint client (default strategy: LEAST_LOADED)
 multi_client = MultiEndpointClient(
     endpoints=endpoints,
-    strategy=LoadBalanceStrategy.LEAST_LOADED,
+    # strategy=LoadBalanceStrategy.LEAST_LOADED,  # This is the default
     health_check_interval=30.0,  # Check health every 30 seconds
 )
 
@@ -103,20 +107,20 @@ vs = VirtualScreening(client=multi_client)
 
 ### Running Multiple Local NIM Instances
 
-To run multiple Boltz-2 NIM instances on different ports:
+To run multiple Boltz-2 NIM v1.6 instances on different ports:
 
 ```bash
 # Terminal 1 - First instance on port 8000
-docker run --rm --gpus device=0 -p 8000:8000 \
-  nvcr.io/nim/mit/boltz-2:latest
+docker run --rm --gpus device=0 --shm-size=16G -p 8000:8000 \
+  -e NGC_API_KEY nvcr.io/nim/mit/boltz2:1.6.0
 
 # Terminal 2 - Second instance on port 8001  
-docker run --rm --gpus device=1 -p 8001:8000 \
-  nvcr.io/nim/mit/boltz-2:latest
+docker run --rm --gpus device=1 --shm-size=16G -p 8001:8000 \
+  -e NGC_API_KEY nvcr.io/nim/mit/boltz2:1.6.0
 
 # Terminal 3 - Third instance on port 8002
-docker run --rm --gpus device=2 -p 8002:8000 \
-  nvcr.io/nim/mit/boltz-2:latest
+docker run --rm --gpus device=2 --shm-size=16G -p 8002:8000 \
+  -e NGC_API_KEY nvcr.io/nim/mit/boltz2:1.6.0
 ```
 
 ## 🧬 **Complete Functionality Examples**
@@ -171,8 +175,7 @@ async def predict_protein_ligand_multi_endpoint():
         predict_affinity=True,
         sampling_steps_affinity=200,
         diffusion_samples_affinity=5,
-        pocket_residues=[10, 11, 12, 13, 14],
-        pocket_radius=8.0
+        pocket_residues=[10, 11, 12, 13, 14]
     )
     
     print(f"Complex prediction completed with {len(result.structures)} structures")
@@ -194,8 +197,7 @@ async def predict_covalent_multi_endpoint():
         protein_sequence="MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLAGG",
         ccd="ASP",  # Aspirin CCD code
         predict_affinity=True,
-        pocket_residues=[10, 11, 12, 13, 14],
-        pocket_radius=8.0
+        pocket_residues=[10, 11, 12, 13, 14]
     )
     
     print(f"Covalent complex prediction completed")
@@ -335,7 +337,7 @@ async def monitor_health():
 
 ### Mixed Endpoint Types
 
-You can combine local and cloud endpoints:
+You can combine local NIMs, NVIDIA hosted, and SageMaker endpoints:
 
 ```python
 endpoints = [
@@ -353,8 +355,19 @@ endpoints = [
         endpoint_type="nvidia_hosted",
         weight=0.5  # Use less frequently
     ),
+
+    # AWS SageMaker (requires boto3 and IAM permissions)
+    EndpointConfig(
+        base_url="http://localhost:8000",  # unused when endpoint_type is "sagemaker"; required on EndpointConfig
+        endpoint_type="sagemaker",
+        sagemaker_endpoint_name="my-boltz2-endpoint",
+        sagemaker_region="us-east-1",
+        weight=1.0,
+    ),
 ]
 ```
+
+For a SageMaker-only client (no multi-endpoint), use `Boltz2Client(endpoint_type="sagemaker", sagemaker_endpoint_name="...", sagemaker_region="...")` as described in the main README.
 
 ### Custom Health Check Settings
 
@@ -383,10 +396,11 @@ multi_client.print_status()
 
 ## Performance Tips
 
-1. **Use Least Loaded Strategy**: Generally provides best throughput
+1. **Least Loaded is Default**: The `LEAST_LOADED` strategy is now the default (generally provides best throughput)
 2. **Set Appropriate Weights**: Assign higher weights to more powerful servers
 3. **Monitor Health**: Adjust health check intervals based on your needs
 4. **Batch Size**: Consider using smaller batch sizes to distribute work better
+5. **v1.6 Limits**: Use up to `recycling_steps=10` and `diffusion_samples=25` for higher quality
 
 ## Deployment Patterns
 

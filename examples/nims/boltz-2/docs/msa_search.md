@@ -1,15 +1,18 @@
 # MSA Search NIM Integration Guide
 
-Copyright (c) 2025, NVIDIA CORPORATION. All rights reserved.
+Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
 
-This guide explains how to use NVIDIA's GPU-accelerated MSA Search NIM with the Boltz-2 Python Client for enhanced protein structure predictions.
+This guide explains how to use NVIDIA's GPU-accelerated MSA Search NIM (v2.3.0+) with the Boltz-2 Python Client for enhanced protein structure predictions.
+
+Reference: [MSA Search NIM docs](https://docs.nvidia.com/nim/bionemo/msa-search/2.3.0/overview.html)
 
 ## Overview
 
 The MSA Search NIM integration provides:
-- GPU-accelerated sequence similarity search across multiple databases
-- Automatic MSA generation from protein sequences
-- Multiple output format support (A3M, FASTA, CSV, Stockholm)
+- **Monomer MSA Search** -- GPU-accelerated sequence similarity search
+- **Paired MSA Search** (v2.1.0+) -- species-based pairing for protein complexes
+- **Structural Template Search** (v2.2.0+) -- find homologous PDB structures
+- Output formats: A3M, FASTA
 - Seamless integration with Boltz-2 structure prediction
 - Batch processing capabilities for multiple sequences
 
@@ -93,14 +96,6 @@ fasta_path = await msa_integration.search_and_save(
     max_msa_sequences=500
 )
 
-# Save as Stockholm (for conservation analysis)
-sto_path = await msa_integration.search_and_save(
-    sequence="YOUR_PROTEIN_SEQUENCE",
-    output_path="protein_msa.sto",
-    output_format="sto",
-    databases=["Uniref30_2302"],
-    max_msa_sequences=500
-)
 ```
 
 ### Batch MSA Search
@@ -126,41 +121,108 @@ for seq_id, path in msa_paths.items():
     print(f"{seq_id}: {path}")
 ```
 
+## Paired MSA Search (Multimers)
+
+For protein complexes, paired search finds homologs per chain and pairs them by
+species -- essential for AlphaFold-Multimer and Boltz-2 multimer predictions.
+
+```python
+from boltz2_client import MSASearchClient
+
+msa_client = MSASearchClient(endpoint_url="http://localhost:8001")
+
+# Two-chain hemoglobin example
+response = await msa_client.paired_search(
+    sequences={
+        "A": "VLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSH",
+        "B": "MHLTPEEKSAVTALWGKVNVDEVGGEALGRLLVVYPYTQRFFESFGDLST",
+    },
+    pairing_strategy="greedy",   # or "complete" (all chains required)
+    databases=["uniref30_2302"],
+)
+
+for chain_id, dbs in response.alignments_by_chain.items():
+    for db, fmts in dbs.items():
+        print(f"Chain {chain_id} / {db}: {len(fmts['a3m'].alignment)} chars")
+```
+
+Pairing strategies (only differ for 3+ chains):
+- **greedy** -- maximise rows, allow gaps where a species lacks a chain
+- **complete** -- only include species with hits for *all* chains
+
+## Structural Template Search
+
+Find homologous PDB structures and retrieve mmCIF files in one request.
+
+```python
+response = await msa_client.template_search(
+    sequence="VLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSH",
+    structural_template_databases=["pdb70_220313"],
+    max_structures=10,
+)
+
+# Template hits
+for pdb_id, tpl in response.structures.items():
+    print(f"{pdb_id}: {tpl.format}, {len(tpl.structure)} chars")
+
+# MSA alignments (same as monomer search)
+a3m = response.alignments["uniref30_2302"]["a3m"].alignment
+```
+
 ## Available Databases
 
-The MSA Search NIM supports multiple sequence databases:
+The default ColabFold databases shipped with MSA Search NIM v2.0+ (GPU-Server
+enabled by default):
 
-- **Uniref30_2302**: UniRef clusters at 30% identity (updated 2023-02)
-- **uniref50**: UniRef clusters at 50% identity  
-- **uniref30**: UniRef clusters at 30% identity
-- **colabfold_envdb_202108**: ColabFold environmental database (2021-08)
-- **bfd**: Big Fantastic Database
-- **uniclust30**: UniClust clusters at 30% identity
-- **pdb70**: PDB sequences clustered at 70% identity
-- **pfam**: Pfam protein families
-- **envdb**: Environmental sequence database
+- **uniref30_2302** -- UniRef clusters at 30 % identity (2023-02)
+- **colabfold_envdb_202108** -- ColabFold environmental database (2021-08)
+- **pdb70_220313** -- PDB sequences clustered at 70 % identity (for templates)
+
+> Database names are **case-insensitive** since v2.2.0.
 
 Check available databases:
 ```python
-databases = await client.get_msa_databases()
-print(f"Available: {databases}")
+metadata = await msa_client.get_metadata()    # preferred (v2.2.0+)
+# or (deprecated):
+# configs = await msa_client.get_databases()
 ```
 
 ## Parameters
 
-### MSA Search Parameters
+### Monomer Search
 
-- **sequence** (str): Query protein sequence
-- **databases** (List[str]): Databases to search (default: ["Uniref30_2302", "colabfold_envdb_202108"])
-- **max_msa_sequences** (int): Maximum number of sequences to return (1-10001, default: 500)
-- **e_value** (float): E-value threshold for hits (default: 0.0001)
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `sequence` | str | *required* | Query protein sequence (1-4096 chars, accepts `X`) |
+| `databases` | list[str] | `["all"]` | Databases to search (case-insensitive) |
+| `max_msa_sequences` | int | 500 | Max sequences per database (`NIM_GLOBAL_MAX_MSA_DEPTH`) |
+| `e_value` | float | 0.0001 | E-value threshold (0.0-1.0) |
+| `output_alignment_formats` | list[str] | `["a3m"]` | `"a3m"` and/or `"fasta"` |
+| `search_type` | str | `"colabfold"` | `"colabfold"` (cascaded) or `"alphafold2"` (single-pass) |
+
+### Paired Search
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `sequences` | list or dict | *required* | One sequence per chain (min 2) |
+| `pairing_strategy` | str | `"greedy"` | `"greedy"` or `"complete"` |
+| `unpack` | bool | `True` | Per-chain output vs raw combined |
+| `databases` / `e_value` / `max_msa_sequences` | | | Same as monomer |
+
+### Structural Template Search
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `sequence` | str | *required* | Query protein sequence |
+| `structural_template_databases` | list[str] | `["pdb70_220313"]` | PDB databases for templates |
+| `msa_databases` | list[str] | `["all"]` | Databases for MSA generation |
+| `max_structures` | int | 20 | Max PDB structures to return |
+| `e_value` / `max_msa_sequences` | | | Same as monomer |
 
 ### Output Formats
 
-- **a3m**: A3M format with metadata (recommended for structure prediction)
-- **fasta**: Standard FASTA format
-- **csv**: CSV with hit statistics and sequences
-- **sto**: Stockholm format with alignment metadata
+- **a3m** -- A3M format with metadata (recommended for structure prediction)
+- **fasta** -- Standard FASTA format
 
 ## Advanced Usage
 
@@ -169,38 +231,53 @@ print(f"Available: {databases}")
 ```python
 from boltz2_client import MSASearchClient, MSAFormatConverter
 
-# Create standalone MSA search client
 msa_client = MSASearchClient(
-    endpoint_url="https://health.api.nvidia.com/v1/biology/nvidia/msa-search",
-    api_key="your_api_key",
+    endpoint_url="http://localhost:8001",
     timeout=300,
-    max_retries=3
+    max_retries=3,
 )
 
-# Search
+# Monomer search
 response = await msa_client.search(
     sequence="YOUR_SEQUENCE",
-    databases=["Uniref30_2302"],
-    max_msa_sequences=1000
+    databases=["uniref30_2302"],
+    max_msa_sequences=500,
 )
-
-# Convert to desired format
 a3m_content = MSAFormatConverter.extract_alignment(response, "a3m")
 fasta_content = MSAFormatConverter.extract_alignment(response, "fasta")
-sto_content = MSAFormatConverter.extract_alignment(response, "sto")
+
+# Paired search for a multimer
+paired = await msa_client.paired_search(
+    sequences=["SEQ_CHAIN_A", "SEQ_CHAIN_B"],
+    pairing_strategy="greedy",
+)
+
+# Structural template search
+templates = await msa_client.template_search(
+    sequence="YOUR_SEQUENCE",
+    structural_template_databases=["pdb70_220313"],
+    max_structures=10,
+)
 ```
 
-### MSA Search Response Structure
+### Response Structures
 
 ```python
-# Response contains:
+# Monomer MSASearchResponse:
 response.alignments     # Dict[database][format] -> AlignmentFileRecord
-response.templates      # Optional template hits
 response.metrics        # Optional search metrics
 
+# Paired PairedMSASearchResponse:
+response.alignments_by_chain   # Dict[chain_id][database][format] -> AlignmentFileRecord
+
+# Template StructuralTemplateResponse:
+response.alignments     # MSA alignments (same as monomer)
+response.search_hits    # Dict[database][format] -> SearchHitRecord (M8 format)
+response.structures     # Dict[pdb_id] -> StructuralTemplate (mmCIF)
+
 # Each AlignmentFileRecord contains:
-record.alignment    # The alignment content (A3M/FASTA/STO format)
-record.format       # The format type ("a3m", "fasta", "sto")
+record.alignment    # The alignment content (A3M or FASTA format)
+record.format       # The format type ("a3m" or "fasta")
 ```
 
 ## Integration with YAML Configs
@@ -219,9 +296,9 @@ sequences:
 ## Best Practices
 
 1. **Database Selection**
-   - Use Uniref30_2302 for general proteins
-   - Add colabfold_envdb_202108 for environmental sequences
-   - Use pdb70 when structural homologs are important
+   - Use `uniref30_2302` for general proteins
+   - Add `colabfold_envdb_202108` for environmental sequences
+   - Use `pdb70_220313` for structural template search
 
 2. **Parameter Tuning**
   - Increase max_msa_sequences for proteins with many homologs
@@ -260,8 +337,8 @@ sequences:
    - Or pass api_key to configure_msa_search()
 
 4. **Database not available**
-   - Check available databases with get_msa_databases()
-   - Use only supported database names
+   - Check available databases with `msa_client.get_metadata()`
+   - Use only supported database names (case-insensitive since v2.2.0)
 
 ## Example Scripts
 
@@ -312,7 +389,7 @@ Options:
 - `-d, --databases`: Databases to search (can specify multiple)
 - `--max-sequences`: Maximum sequences to return
 - `--e-value`: E-value threshold
-- `-f, --output-format`: Output format (a3m, fasta, sto)
+- `-f, --output-format`: Output format (a3m, fasta)
 - `-o, --output`: Output file path (required)
 
 ### MSA-Guided Prediction Command
@@ -338,7 +415,7 @@ Options:
 - `-d, --databases`: Databases to search
 - `--max-sequences`: Maximum sequences for MSA
 - `--e-value`: E-value threshold
-- `--recycling-steps`: Number of recycling steps (1-6)
+- `--recycling-steps`: Number of recycling steps (1-10)
 - `--sampling-steps`: Number of sampling steps (10-1000)
 - `--output-dir`: Directory to save output files
 - `--no-save-msa`: Don't save the MSA file separately
@@ -358,7 +435,7 @@ boltz2 msa-predict "MKTVRQERLKSIVRILERSKEPVSGAQ..." --output-dir results/
 
 ## References
 
-- [NVIDIA MSA Search NIM Documentation](https://docs.nvidia.com/nim/bionemo/msa-search/latest/index.html)
+- [NVIDIA MSA Search NIM v2.3.0 Documentation](https://docs.nvidia.com/nim/bionemo/msa-search/2.3.0/overview.html)
 - [Boltz-2 Python Client](https://github.com/NVIDIA/digital-biology-examples/tree/main/examples/nims/boltz-2)
 - [A3M Format Specification](http://soeding.genzentrum.lmu.de/software/hhsuite/)
 

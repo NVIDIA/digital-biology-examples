@@ -1,12 +1,12 @@
 # ---------------------------------------------------------------
-# Copyright (c) 2025, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
 # ---------------------------------------------------------------
 
 """
 Boltz-2 Python Client
 
 A comprehensive Python client for NVIDIA's Boltz-2 molecular structure prediction service.
-Supports both local deployments and NVIDIA hosted endpoints with full API coverage.
+Supports local, NVIDIA hosted, and AWS SageMaker endpoints with full API coverage.
 
 Example:
     >>> from boltz2_client import Boltz2Client, EndpointType
@@ -26,7 +26,7 @@ Example:
     >>> print(f"Confidence: {result.confidence_scores[0]:.3f}")
 """
 
-__version__ = "0.3.3"
+__version__ = "0.5.1"
 __author__ = "NVIDIA Corporation"
 __email__ = "bionemo-support@nvidia.com"
 
@@ -36,6 +36,7 @@ from .models import (
     PredictionResponse,
     Polymer,
     Ligand,
+    Contact,
     PocketConstraint,
     BondConstraint,
     Atom,
@@ -43,8 +44,10 @@ from .models import (
     AlignmentFormat,
     HealthStatus,
     ServiceMetadata,
+    StructuralTemplate,
+    Modification,
+    AffinityPrediction,
 )
-from .models_affinity import AffinityPrediction
 from .exceptions import (
     Boltz2Error,
     Boltz2ClientError,
@@ -70,8 +73,12 @@ from .msa_search import (
     MSASearchRequest,
     MSASearchResponse,
     MSAFormatConverter,
+    PairedMSASearchRequest,
+    PairedMSASearchResponse,
+    StructuralTemplateRequest,
+    StructuralTemplateResponse,
 )
-from .a3m_to_csv_converter import (
+from .a3m import (
     A3MToCSVConverter,
     A3MParser,
     A3MMSA,
@@ -79,14 +86,21 @@ from .a3m_to_csv_converter import (
     convert_a3m_to_multimer_csv,
     create_multimer_msa_request,
     create_paired_msa_per_chain,
-    save_prediction_outputs,
-    get_prediction_summary,
     ConversionResult,
     GreedyPairingStrategy,
     CompletePairingStrategy,
     TaxonomyPairingStrategy,
     SpeciesMapper,
     SPECIES_TO_TAXID,
+)
+from .utils import (
+    save_prediction_outputs,
+    get_prediction_summary,
+    save_pae_matrix,
+    save_pde_matrix,
+    get_pae_summary,
+    convert_cif_to_pdb,
+    convert_pdb_to_cif,
 )
 
 # Optional imports for visualization
@@ -122,6 +136,7 @@ __all__ = [
     "PredictionResponse", 
     "Polymer",
     "Ligand",
+    "Contact",
     "PocketConstraint",
     "BondConstraint",
     "Atom",
@@ -130,6 +145,8 @@ __all__ = [
     "HealthStatus",
     "ServiceMetadata",
     "AffinityPrediction",
+    "StructuralTemplate",
+    "Modification",
     
     # Exceptions
     "Boltz2Error",
@@ -156,6 +173,10 @@ __all__ = [
     "MSASearchRequest",
     "MSASearchResponse",
     "MSAFormatConverter",
+    "PairedMSASearchRequest",
+    "PairedMSASearchResponse",
+    "StructuralTemplateRequest",
+    "StructuralTemplateResponse",
     
     # A3M to CSV Multimer Converter
     "A3MToCSVConverter",
@@ -167,6 +188,11 @@ __all__ = [
     "create_paired_msa_per_chain",
     "save_prediction_outputs",
     "get_prediction_summary",
+    "save_pae_matrix",
+    "save_pde_matrix",
+    "get_pae_summary",
+    "convert_cif_to_pdb",
+    "convert_pdb_to_cif",
     "ConversionResult",
     "GreedyPairingStrategy",
     "CompletePairingStrategy",
@@ -201,7 +227,7 @@ def check_health(base_url: str = "http://localhost:8000", endpoint_type: str = "
     
     Args:
         base_url: Base URL of the Boltz-2 service
-        endpoint_type: Type of endpoint ("local" or "nvidia_hosted")
+        endpoint_type: Type of endpoint ("local", "nvidia_hosted", or "sagemaker")
         
     Returns:
         True if service is healthy, False otherwise

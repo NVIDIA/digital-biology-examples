@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# ---------------------------------------------------------------
+# Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
+# ---------------------------------------------------------------
+
 """
 Example 7: Advanced Parameter Control
 
@@ -11,7 +15,7 @@ import asyncio
 import json
 from pathlib import Path
 from boltz2_client import Boltz2Client
-from boltz2_client.models import PredictionRequest, Polymer, Ligand, PocketConstraint
+from boltz2_client.models import PredictionRequest, Polymer, Ligand, Contact, PocketConstraint
 
 
 async def diffusion_parameter_exploration():
@@ -157,11 +161,8 @@ async def advanced_molecular_systems():
         # Pocket constraint for ligand binding
         constraints = [
             PocketConstraint(
-                ligand_id="L1",
-                polymer_id="A",
-                residue_ids=[10, 15, 20, 25],
                 binder="L1",
-                contacts=[10, 15, 20, 25]
+                contacts=[Contact(id="A", residue_index=r) for r in [10, 15, 20, 25]]
             )
         ]
         
@@ -170,7 +171,7 @@ async def advanced_molecular_systems():
         print(f"  - DNA B: {len(polymers[1].sequence)} bp")
         print(f"  - Ligand L1: {ligands[0].smiles}")
         print(f"  - Ligand L2: {ligands[1].smiles}")
-        print(f"  - Pocket constraint: L1 → A residues {constraints[0].residue_ids}")
+        print(f"  - Pocket constraint: L1 → A residues {[c.residue for c in constraints[0].contacts]}")
         
         result = await client.predict_with_advanced_parameters(
             polymers=polymers,
@@ -217,12 +218,14 @@ async def json_configuration_advanced():
         ],
         "constraints": [
             {
-                "constraint_type": "pocket",
-                "ligand_id": "LIG",
-                "polymer_id": "A",
-                "residue_ids": [10, 15, 20, 25, 30],
                 "binder": "LIG",
-                "contacts": [10, 15, 20, 25, 30]
+                "contacts": [
+                    {"id": "A", "residue_index": 10},
+                    {"id": "A", "residue_index": 15},
+                    {"id": "A", "residue_index": 20},
+                    {"id": "A", "residue_index": 25},
+                    {"id": "A", "residue_index": 30}
+                ]
             }
         ],
         "recycling_steps": 5,
@@ -242,7 +245,7 @@ async def json_configuration_advanced():
     print(f"Configuration includes:")
     print(f"  - 1 protein ({len(config['polymers'][0]['sequence'])} residues)")
     print(f"  - 1 ligand (aspirin)")
-    print(f"  - Pocket constraint ({len(config['constraints'][0]['residue_ids'])} residues)")
+    print(f"  - Pocket constraint ({len(config['constraints'][0]['contacts'])} residues)")
     print(f"  - High-quality parameters (recycling=5, sampling=150, diffusion=3)")
     
     try:

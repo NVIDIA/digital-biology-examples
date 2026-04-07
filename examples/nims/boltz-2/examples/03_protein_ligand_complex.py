@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# ---------------------------------------------------------------
+# Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
+# ---------------------------------------------------------------
+
 """
 Example 3: Protein-Ligand Complex Prediction
 
@@ -9,7 +13,7 @@ to guide binding to specific regions.
 
 import asyncio
 from boltz2_client import Boltz2Client
-from boltz2_client.models import Polymer, Ligand, PocketConstraint
+from boltz2_client.models import Polymer, Ligand, Contact, PocketConstraint
 
 
 async def protein_ligand_complex():
@@ -172,12 +176,8 @@ async def pocket_constraint_example():
         
         # Create pocket constraint
         pocket_constraint = PocketConstraint(
-            constraint_type="pocket",
-            ligand_id="LIG",
-            polymer_id="A", 
-            residue_ids=pocket_residues,
             binder="LIG",
-            contacts=[]  # Leave empty for now to avoid server validation issues
+            contacts=[Contact(id="A", residue_index=r) for r in pocket_residues]
         )
         
         print("🔄 Running prediction with pocket constraint...")

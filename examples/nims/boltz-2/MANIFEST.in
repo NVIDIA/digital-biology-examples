@@ -1,17 +1,14 @@
 include README.md
 include LICENSE
-include YAML_GUIDE.md
+include CHANGELOG.md
+recursive-include docs *.md
 recursive-include licenses *.md *.txt LICENSE* *-LICENSE
-include ASYNC_GUIDE.md
-include COVALENT_COMPLEX_GUIDE.md
-include PARAMETERS.md
-include INSTALL_TESTPYPI.md
 recursive-include boltz2_client *.py
-recursive-include examples *.py *.yaml *.a3m
+recursive-include examples *.py *.yaml *.a3m *.ipynb *.md *.json *.txt *.sh
 recursive-include tests *.py
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]
 recursive-exclude * .DS_Store
 recursive-exclude dev *
 recursive-exclude * *.cif
-recursive-exclude * *.log 
+recursive-exclude * *.log

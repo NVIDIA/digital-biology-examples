@@ -1,5 +1,7 @@
 # Virtual Screening Guide
 
+Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
+
 The Boltz-2 Python client provides a powerful high-level API for virtual screening campaigns, enabling drug discovery workflows with minimal code.
 
 ## Overview
@@ -116,14 +118,13 @@ from boltz2_client import VirtualScreening
 
 screener = VirtualScreening()
 
-# Define binding pocket residues (0-indexed)
+# Define binding pocket residues (1-based sequence positions)
 pocket_residues = [45, 50, 55, 60, 65, 70, 75]
 
 result = screener.screen(
     target_sequence=sequence,
     compound_library=compounds,
     pocket_residues=pocket_residues,
-    pocket_radius=10.0,  # Angstroms
     predict_affinity=True
 )
 ```
@@ -218,7 +219,7 @@ saved_files = result.save_results(
    )
    screener = VirtualScreening(client=multi_client, max_workers=8)
    ```
-   See [MULTI_ENDPOINT_GUIDE.md](MULTI_ENDPOINT_GUIDE.md) for detailed setup.
+   See [multi_endpoint.md](multi_endpoint.md) for detailed setup.
 
 2. **Use Async Client for Large Libraries**
    ```python
@@ -318,7 +319,7 @@ df.to_excel("screening_results.xlsx", index=False)
 
 ## API Reference
 
-See the [API documentation](API_REFERENCE.md) for detailed parameter descriptions.
+See [parameters.md](parameters.md) for detailed parameter descriptions and the main [README.md](../README.md) documentation section for guides and examples.
 ---
 
 ## Disclaimer

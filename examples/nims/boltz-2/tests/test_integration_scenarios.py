@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# ---------------------------------------------------------------
+# Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
+# ---------------------------------------------------------------
+
 """
 Integration Test Suite for Multi-Endpoint Boltz2 NIM Functionality
 
@@ -16,7 +20,6 @@ import pytest
 import asyncio
 import tempfile
 import os
-import time
 from pathlib import Path
 from unittest.mock import Mock, patch, AsyncMock, MagicMock
 import yaml
@@ -35,90 +38,14 @@ from boltz2_client import (
     Boltz2Client,
     Boltz2SyncClient
 )
-from boltz2_client.models import PredictionResponse, HealthStatus, ServiceMetadata
+from boltz2_client.models import PredictionResponse, HealthStatus, ServiceMetadata, StructureData
 from boltz2_client.exceptions import Boltz2APIError
 
-
-# Test data
-CDK2_SEQUENCE = "MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLAGG"
-SAMPLE_SMILES = "CC(=O)OC1=CC=CC=C1C(=O)O"  # Aspirin
-SAMPLE_CCD = "ASP"
-SAMPLE_DNA = "ATCGATCGATCGATCG"
-
-# Sample compounds for testing
-SAMPLE_COMPOUNDS = [
-    {"name": "Aspirin", "smiles": "CC(=O)OC1=CC=CC=C1C(=O)O"},
-    {"name": "Ibuprofen", "smiles": "CC(C)CC1=CC=C(C=C1)C(C)C(=O)O"},
-    {"name": "Paracetamol", "smiles": "CC(=O)NC1=CC=C(O)C=C1"},
-]
+from constants import CDK2_SEQUENCE, SAMPLE_SMILES, SAMPLE_CCD, SAMPLE_DNA, SAMPLE_COMPOUNDS
 
 
 class TestIntegrationScenarios:
     """Test integration scenarios with realistic data and workflows."""
-    
-    @pytest.fixture
-    def mock_healthy_endpoints(self):
-        """Create mock healthy endpoints for testing."""
-        endpoints = []
-        for i in range(3):
-            endpoint = Mock()
-            endpoint.endpoint_config = Mock()
-            endpoint.endpoint_config.base_url = f"http://localhost:800{i}"
-            endpoint.endpoint_config.weight = 1.0
-            endpoint.is_healthy = True
-            endpoint.current_requests = 0
-            endpoint.total_requests = 0
-            endpoint.failed_requests = 0
-            endpoint.average_response_time = 0.0
-            endpoint.last_health_check = time.time()
-            endpoints.append(endpoint)
-        return endpoints
-    
-    @pytest.fixture
-    def mock_mixed_health_endpoints(self):
-        """Create mock endpoints with mixed health status."""
-        endpoints = []
-        
-        # Healthy endpoint
-        healthy = Mock()
-        healthy.endpoint_config = Mock()
-        healthy.endpoint_config.base_url = "http://localhost:8000"
-        healthy.endpoint_config.weight = 1.0
-        healthy.is_healthy = True
-        healthy.current_requests = 0
-        healthy.total_requests = 10
-        healthy.failed_requests = 0
-        healthy.average_response_time = 2.5
-        healthy.last_health_check = time.time()
-        endpoints.append(healthy)
-        
-        # Unhealthy endpoint
-        unhealthy = Mock()
-        unhealthy.endpoint_config = Mock()
-        unhealthy.endpoint_config.base_url = "http://localhost:8001"
-        unhealthy.endpoint_config.weight = 1.0
-        unhealthy.is_healthy = False
-        unhealthy.current_requests = 0
-        unhealthy.total_requests = 5
-        unhealthy.failed_requests = 3
-        unhealthy.average_response_time = 10.0
-        unhealthy.last_health_check = time.time()
-        endpoints.append(unhealthy)
-        
-        # Recovered endpoint
-        recovered = Mock()
-        recovered.endpoint_config = Mock()
-        recovered.endpoint_config.base_url = "http://localhost:8002"
-        recovered.endpoint_config.weight = 1.0
-        recovered.is_healthy = True
-        recovered.current_requests = 0
-        recovered.total_requests = 8
-        recovered.failed_requests = 0
-        recovered.average_response_time = 3.0
-        recovered.last_health_check = time.time()
-        endpoints.append(recovered)
-        
-        return endpoints
 
     # Test 1: End-to-End Protein Prediction Workflow
     @pytest.mark.asyncio
@@ -136,9 +63,12 @@ class TestIntegrationScenarios:
         )
         
         mock_client.predict_protein_structure.return_value = PredictionResponse(
-            structures=["structure1.cif", "structure2.cif"],
+            structures=[
+                StructureData(format="mmcif", structure="MOCK_CIF_1"),
+                StructureData(format="mmcif", structure="MOCK_CIF_2"),
+            ],
             confidence_scores=[0.85, 0.78],
-            metadata={"test": "data"}
+            metrics={"test": "data"},
         )
         
         # Test health check
@@ -184,9 +114,12 @@ class TestIntegrationScenarios:
                 details={"test": "data"}
             )
             endpoint.client.predict_protein_structure.return_value = PredictionResponse(
-                structures=["structure1.cif", "structure2.cif"],
+                structures=[
+                    StructureData(format="mmcif", structure="MOCK_CIF_1"),
+                    StructureData(format="mmcif", structure="MOCK_CIF_2"),
+                ],
                 confidence_scores=[0.85, 0.78],
-                metadata={"test": "data"}
+                metrics={"test": "data"},
             )
         
         # Test health check
@@ -211,8 +144,8 @@ class TestIntegrationScenarios:
         assert call_count >= 1
 
     # Test 2: End-to-End Virtual Screening Workflow
-    @pytest.mark.asyncio
-    async def test_end_to_end_virtual_screening_single_endpoint(self):
+    # Sync test: vs.screen() uses asyncio.run() internally; must not run under pytest-asyncio loop.
+    def test_end_to_end_virtual_screening_single_endpoint(self):
         """Test complete virtual screening workflow with single endpoint."""
         # Mock single client
         mock_client = Mock(spec=Boltz2Client)
@@ -220,9 +153,9 @@ class TestIntegrationScenarios:
         
         # Set up mock response
         mock_client.predict_protein_ligand_complex.return_value = PredictionResponse(
-            structures=["complex1.cif"],
+            structures=[StructureData(format="mmcif", structure="MOCK_CIF_1")],
             confidence_scores=[0.82],
-            metadata={"test": "data"}
+            metrics={"test": "data"},
         )
         
         # Create virtual screening instance
@@ -250,8 +183,7 @@ class TestIntegrationScenarios:
             assert result.results[1]["name"] == "Ibuprofen"
             assert "predicted_pic50" in result.results[0]
     
-    @pytest.mark.asyncio
-    async def test_end_to_end_virtual_screening_multi_endpoint(self, mock_healthy_endpoints):
+    def test_end_to_end_virtual_screening_multi_endpoint(self, mock_healthy_endpoints):
         """Test complete virtual screening workflow with multiple endpoints."""
         # Create multi-endpoint client
         multi_client = MultiEndpointClient(
@@ -268,9 +200,9 @@ class TestIntegrationScenarios:
         # Set up responses
         for endpoint in multi_client.endpoints:
             endpoint.client.predict_protein_ligand_complex.return_value = PredictionResponse(
-                structures=["complex1.cif"],
+                structures=[StructureData(format="mmcif", structure="MOCK_CIF_1")],
                 confidence_scores=[0.82],
-                metadata={"test": "data"}
+                metrics={"test": "data"},
             )
         
         # Create virtual screening instance
@@ -325,9 +257,9 @@ class TestIntegrationScenarios:
         # Set up responses
         for endpoint in multi_client.endpoints:
             endpoint.client.predict_protein_structure.return_value = PredictionResponse(
-                structures=["structure.cif"],
+                structures=[StructureData(format="mmcif", structure="MOCK_CIF_1")],
                 confidence_scores=[0.85],
-                metadata={"test": "data"}
+                metrics={"test": "data"},
             )
         
         # Make prediction - should select least loaded endpoint
@@ -355,9 +287,9 @@ class TestIntegrationScenarios:
         # Set up responses
         for endpoint in multi_client.endpoints:
             endpoint.client.predict_protein_structure.return_value = PredictionResponse(
-                structures=["structure.cif"],
+                structures=[StructureData(format="mmcif", structure="MOCK_CIF_1")],
                 confidence_scores=[0.85],
-                metadata={"test": "data"}
+                metrics={"test": "data"},
             )
         
         # Make multiple predictions to test round robin
@@ -372,10 +304,10 @@ class TestIntegrationScenarios:
     @pytest.mark.asyncio
     async def test_failover_scenario(self, mock_mixed_health_endpoints):
         """Test failover scenario when some endpoints are unhealthy."""
-        # Create multi-endpoint client
+        # ROUND_ROBIN avoids tight loop when LEAST_LOADED keeps re-selecting an already-tried endpoint.
         multi_client = MultiEndpointClient(
             endpoints=["http://localhost:8000", "http://localhost:8001", "http://localhost:8002"],
-            strategy=LoadBalanceStrategy.LEAST_LOADED,
+            strategy=LoadBalanceStrategy.ROUND_ROBIN,
             is_async=True
         )
         
@@ -387,19 +319,28 @@ class TestIntegrationScenarios:
         # Set up responses - first endpoint fails, others succeed
         multi_client.endpoints[0].client.predict_protein_structure.side_effect = Exception("Endpoint 1 failed")
         multi_client.endpoints[1].client.predict_protein_structure.return_value = PredictionResponse(
-            structures=["structure.cif"],
+            structures=[StructureData(format="mmcif", structure="MOCK_CIF_1")],
             confidence_scores=[0.85],
-            metadata={"test": "data"}
+            metrics={"test": "data"},
         )
         multi_client.endpoints[2].client.predict_protein_structure.return_value = PredictionResponse(
-            structures=["structure.cif"],
+            structures=[StructureData(format="mmcif", structure="MOCK_CIF_1")],
             confidence_scores=[0.85],
-            metadata={"test": "data"}
+            metrics={"test": "data"},
         )
         
         # Make prediction - should failover to healthy endpoint
-        result = await multi_client.predict_protein_structure(sequence=CDK2_SEQUENCE)
+        try:
+            result = await asyncio.wait_for(
+                multi_client.predict_protein_structure(sequence=CDK2_SEQUENCE),
+                timeout=10.0,
+            )
+        except asyncio.TimeoutError:
+            pytest.fail(
+                "predict_protein_structure did not complete within 10s (possible failover hang)"
+            )
         
+        assert result is not None
         # Verify failover occurred
         assert multi_client.endpoints[0].client.predict_protein_structure.called
         assert multi_client.endpoints[1].client.predict_protein_structure.called or \
@@ -504,9 +445,9 @@ class TestIntegrationScenarios:
         # Set up responses
         for endpoint in multi_client.endpoints:
             endpoint.client.predict_protein_structure.return_value = PredictionResponse(
-                structures=["structure.cif"],
+                structures=[StructureData(format="mmcif", structure="MOCK_CIF_1")],
                 confidence_scores=[0.85],
-                metadata={"test": "data"}
+                metrics={"test": "data"},
             )
         
         # Make multiple predictions to build statistics
@@ -537,10 +478,9 @@ class TestIntegrationScenarios:
     @pytest.mark.asyncio
     async def test_error_handling_all_endpoints_failing(self, mock_healthy_endpoints):
         """Test error handling when all endpoints fail."""
-        # Create multi-endpoint client
         multi_client = MultiEndpointClient(
             endpoints=["http://localhost:8000", "http://localhost:8001", "http://localhost:8002"],
-            strategy=LoadBalanceStrategy.LEAST_LOADED,
+            strategy=LoadBalanceStrategy.ROUND_ROBIN,
             is_async=True
         )
         
@@ -554,8 +494,14 @@ class TestIntegrationScenarios:
             endpoint.client.predict_protein_structure.side_effect = Exception("All endpoints failed")
         
         # Should raise Boltz2APIError
-        with pytest.raises(Boltz2APIError, match="All endpoints failed"):
-            await multi_client.predict_protein_structure(sequence=CDK2_SEQUENCE)
+        try:
+            with pytest.raises(Boltz2APIError, match="All endpoints failed"):
+                await asyncio.wait_for(
+                    multi_client.predict_protein_structure(sequence=CDK2_SEQUENCE),
+                    timeout=10.0,
+                )
+        except asyncio.TimeoutError:
+            pytest.fail("predict_protein_structure did not complete within 10s")
         
         # Verify all endpoints were attempted
         for endpoint in multi_client.endpoints:
@@ -564,10 +510,9 @@ class TestIntegrationScenarios:
     @pytest.mark.asyncio
     async def test_error_handling_partial_failure(self, mock_healthy_endpoints):
         """Test error handling with partial endpoint failure."""
-        # Create multi-endpoint client
         multi_client = MultiEndpointClient(
             endpoints=["http://localhost:8000", "http://localhost:8001", "http://localhost:8002"],
-            strategy=LoadBalanceStrategy.LEAST_LOADED,
+            strategy=LoadBalanceStrategy.ROUND_ROBIN,
             is_async=True
         )
         
@@ -579,18 +524,24 @@ class TestIntegrationScenarios:
         # Set up mixed responses - first fails, second succeeds
         multi_client.endpoints[0].client.predict_protein_structure.side_effect = Exception("Endpoint 1 failed")
         multi_client.endpoints[1].client.predict_protein_structure.return_value = PredictionResponse(
-            structures=["structure.cif"],
+            structures=[StructureData(format="mmcif", structure="MOCK_CIF_1")],
             confidence_scores=[0.85],
-            metadata={"test": "data"}
+            metrics={"test": "data"},
         )
         multi_client.endpoints[2].client.predict_protein_structure.return_value = PredictionResponse(
-            structures=["structure.cif"],
+            structures=[StructureData(format="mmcif", structure="MOCK_CIF_1")],
             confidence_scores=[0.85],
-            metadata={"test": "data"}
+            metrics={"test": "data"},
         )
         
         # Should succeed with second endpoint
-        result = await multi_client.predict_protein_structure(sequence=CDK2_SEQUENCE)
+        try:
+            result = await asyncio.wait_for(
+                multi_client.predict_protein_structure(sequence=CDK2_SEQUENCE),
+                timeout=10.0,
+            )
+        except asyncio.TimeoutError:
+            pytest.fail("predict_protein_structure did not complete within 10s")
         
         assert result is not None
         assert len(result.structures) == 1

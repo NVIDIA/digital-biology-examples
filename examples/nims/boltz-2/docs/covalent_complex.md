@@ -1,6 +1,6 @@
 # Covalent Protein-Ligand Complex Prediction Guide
 
-Copyright (c) 2025, NVIDIA CORPORATION. All rights reserved.
+Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
 
 This guide demonstrates how to test and use the `boltz2-python-client` package for covalent protein-ligand complex prediction.
 
@@ -19,7 +19,7 @@ This guide demonstrates how to test and use the `boltz2-python-client` package f
 
 ⚠️ **COVALENT COMPLEX CONSTRAINTS:**
 - The covalent bond constraint format is working but requires:
-  - Correct residue indexing (0-based)
+  - Correct residue indexing in constraints (1-based `residue_index`)
   - Valid cysteine positions in the sequence
   - Proper atom naming conventions
 
@@ -90,12 +90,13 @@ async def predict_covalent_complex():
     )
     
     # Run prediction
-    response = await client.predict(request, show_progress=True)
+    response = await client.predict(request)
     
-    # Save results
-    saved_files = await client.save_prediction(
-        response, 
-        "covalent_results", 
+    # Save structures to disk
+    from boltz2_client.utils import save_prediction_outputs
+    saved_files = save_prediction_outputs(
+        response,
+        output_dir="covalent_results",
         prefix="kras_u4u"
     )
     
@@ -177,7 +178,7 @@ A successful covalent complex prediction should produce:
 2. **Use CCD codes**: When available, CCD codes are more reliable than SMILES
 3. **Check confidence**: High confidence (>0.7) indicates reliable predictions
 4. **Save results**: Always save both JSON metadata and mmCIF structures
-5. **Monitor progress**: Use `show_progress=True` for long predictions
+5. **Monitor progress**: Pass a `progress_callback` for long predictions
 
 ## 🚨 **Common Issues & Solutions**
 
@@ -191,7 +192,7 @@ A successful covalent complex prediction should produce:
 **Solution**: Verify the atom names and residue indices are correct
 
 ### Issue: Prediction timeout
-**Solution**: Increase timeout parameter: `client.predict(request, timeout=900)`
+**Solution**: Increase timeout on client construction: `Boltz2Client(timeout=900)`
 
 ## 🎉 **Success!**
 

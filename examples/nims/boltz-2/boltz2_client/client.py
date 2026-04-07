@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------
-# Copyright (c) 2025, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
 # ---------------------------------------------------------------
 
 
@@ -17,19 +17,16 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Union, Any, Tuple, Callable
-from urllib.parse import urljoin
 import os
 
 import httpx
 import yaml
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
 
 from .models import (
     PredictionRequest, PredictionResponse, HealthStatus, ServiceMetadata,
-    Polymer, Ligand, PocketConstraint, BondConstraint, Atom, AlignmentFileRecord,
-    StructureData, PredictionJob, PolymerType, AlignmentFormat, ConstraintType,
-    YAMLConfig, YAMLConfigType
+    Polymer, Ligand, Contact, PocketConstraint, BondConstraint, Atom, AlignmentFileRecord,
+    AlignmentFormat, YAMLConfig, StructuralTemplate,
 )
 from .exceptions import (
     Boltz2ClientError, Boltz2APIError, Boltz2ValidationError, 
@@ -37,7 +34,7 @@ from .exceptions import (
 )
 from .msa_search import (
     MSASearchClient, MSASearchIntegration, MSASearchRequest,
-    MSASearchResponse, MSAFormatConverter
+    MSASearchResponse,
 )
 
 
@@ -45,6 +42,7 @@ class EndpointType:
     """Endpoint type constants."""
     LOCAL = "local"
     NVIDIA_HOSTED = "nvidia_hosted"
+    SAGEMAKER = "sagemaker"
 
 
 class Boltz2Client:
@@ -64,7 +62,9 @@ class Boltz2Client:
         max_retries: int = 3,
         retry_delay: float = 1.0,
         poll_seconds: int = 10,
-        console: Optional[Console] = None
+        console: Optional[Console] = None,
+        sagemaker_endpoint_name: Optional[str] = None,
+        sagemaker_region: Optional[str] = None,
     ):
         """
         Initialize the Boltz-2 client.
@@ -73,13 +73,16 @@ class Boltz2Client:
             base_url: Base URL of the service
                 - Local: "http://localhost:8000" 
                 - NVIDIA Hosted: "https://health.api.nvidia.com"
+                - SageMaker: not used (pass sagemaker_endpoint_name instead)
             api_key: API key for NVIDIA hosted endpoints (can also be set via NVIDIA_API_KEY env var)
-            endpoint_type: Type of endpoint ("local" or "nvidia_hosted")
+            endpoint_type: Type of endpoint ("local", "nvidia_hosted", or "sagemaker")
             timeout: Request timeout in seconds
             max_retries: Maximum number of retry attempts
             retry_delay: Delay between retries in seconds
             poll_seconds: Polling interval for NVIDIA hosted endpoints (NVCF-POLL-SECONDS)
             console: Rich console for output (optional)
+            sagemaker_endpoint_name: SageMaker endpoint name (required when endpoint_type="sagemaker")
+            sagemaker_region: AWS region for SageMaker (default: from AWS config/env)
         """
         self.base_url = base_url.rstrip('/')
         self.endpoint_type = endpoint_type
@@ -100,6 +103,29 @@ class Boltz2Client:
         else:
             self.api_key = None
         
+        # Handle SageMaker endpoint
+        self._sm_runtime = None
+        self._sm_client = None
+        self._sm_endpoint_name = None
+        if endpoint_type == EndpointType.SAGEMAKER:
+            if not sagemaker_endpoint_name:
+                sagemaker_endpoint_name = os.getenv("SAGEMAKER_ENDPOINT_NAME")
+            if not sagemaker_endpoint_name:
+                raise Boltz2ValidationError(
+                    "SageMaker endpoint name is required. "
+                    "Provide via sagemaker_endpoint_name parameter or SAGEMAKER_ENDPOINT_NAME env var."
+                )
+            try:
+                import boto3
+            except ImportError:
+                raise Boltz2ValidationError(
+                    "boto3 is required for SageMaker endpoints. Install with: pip install boto3"
+                )
+            region_kwargs = {"region_name": sagemaker_region} if sagemaker_region else {}
+            self._sm_runtime = boto3.client('sagemaker-runtime', **region_kwargs)
+            self._sm_client = boto3.client('sagemaker', **region_kwargs)
+            self._sm_endpoint_name = sagemaker_endpoint_name
+        
         # Set up URLs based on endpoint type
         if endpoint_type == EndpointType.NVIDIA_HOSTED:
             self.predict_url = f"{self.base_url}/v1/biology/mit/boltz2/predict"
@@ -107,6 +133,12 @@ class Boltz2Client:
             self.ready_url = f"{self.base_url}/v1/health/ready"
             self.metadata_url = f"{self.base_url}/v1/metadata"
             self.status_url = "https://api.nvcf.nvidia.com/v2/nvcf/pexec/status/{task_id}"
+        elif endpoint_type == EndpointType.SAGEMAKER:
+            self.predict_url = None
+            self.health_url = None
+            self.ready_url = None
+            self.metadata_url = None
+            self.status_url = None
         else:
             # Local endpoints
             self.predict_url = f"{self.base_url}/biology/mit/boltz2/predict"
@@ -173,6 +205,8 @@ class Boltz2Client:
 
     async def health_check(self) -> HealthStatus:
         """Check the health status of the Boltz-2 service."""
+        if self.endpoint_type == EndpointType.SAGEMAKER:
+            return await self._sagemaker_health_check()
         try:
             headers = self._get_headers()
             async with httpx.AsyncClient(timeout=10.0) as client:
@@ -186,6 +220,53 @@ class Boltz2Client:
                 )
         except Exception as e:
             raise Boltz2ConnectionError(f"Health check failed: {e}")
+
+    async def _sagemaker_health_check(self) -> HealthStatus:
+        """Check SageMaker endpoint status via describe_endpoint."""
+        try:
+            desc = self._sm_client.describe_endpoint(EndpointName=self._sm_endpoint_name)
+            status = desc.get("EndpointStatus", "Unknown")
+            is_healthy = status == "InService"
+            return HealthStatus(
+                status="healthy" if is_healthy else "unhealthy",
+                timestamp=datetime.now(),
+                details={
+                    "endpoint_name": self._sm_endpoint_name,
+                    "endpoint_status": status,
+                    "endpoint_arn": desc.get("EndpointArn", ""),
+                }
+            )
+        except Exception as e:
+            raise Boltz2ConnectionError(f"SageMaker health check failed: {e}")
+
+    async def _sagemaker_predict(
+        self, request_dict: dict, progress_callback: Optional[Callable] = None
+    ) -> dict:
+        """Invoke a SageMaker endpoint and return the parsed JSON response."""
+        import asyncio
+
+        def _invoke():
+            return self._sm_runtime.invoke_endpoint(
+                EndpointName=self._sm_endpoint_name,
+                ContentType="application/json",
+                Body=json.dumps(request_dict),
+                Accept="application/json",
+            )
+
+        if progress_callback:
+            progress_callback(f"Invoking SageMaker endpoint {self._sm_endpoint_name}...")
+
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(None, _invoke)
+
+        http_status = response["ResponseMetadata"]["HTTPStatusCode"]
+        if http_status != 200:
+            raise Boltz2APIError(
+                f"SageMaker prediction failed with status {http_status}"
+            )
+
+        body = response["Body"].read().decode("utf-8")
+        return json.loads(body)
 
     async def get_service_metadata(self) -> ServiceMetadata:
         """Get service metadata and model information."""
@@ -204,7 +285,7 @@ class Boltz2Client:
         request: PredictionRequest,
         save_structures: bool = True,
         output_dir: Optional[Path] = None,
-        progress_callback: Optional[callable] = None
+        progress_callback: Optional[Callable] = None
     ) -> PredictionResponse:
         """
         Make a structure prediction request with comprehensive parameter support.
@@ -222,8 +303,22 @@ class Boltz2Client:
             output_dir = Path.cwd()
         
         try:
-            # Validate request
-            request_dict = request.dict(exclude_none=True)
+            request_dict = request.model_dump(exclude_none=True)
+
+            if self.endpoint_type == EndpointType.SAGEMAKER:
+                start_time = time.time()
+                response_data = await self._sagemaker_predict(
+                    request_dict, progress_callback
+                )
+                prediction_time = time.time() - start_time
+                if progress_callback:
+                    progress_callback(f"Prediction completed in {prediction_time:.2f}s")
+
+                prediction_response = PredictionResponse(**response_data)
+                if save_structures:
+                    await self._save_structures(prediction_response, output_dir, progress_callback)
+                return prediction_response
+
             headers = self._get_headers()
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -288,9 +383,9 @@ class Boltz2Client:
         Args:
             sequence: Protein sequence
             polymer_id: Polymer identifier
-            recycling_steps: Number of recycling steps (1-6)
+            recycling_steps: Number of recycling steps (1-10)
             sampling_steps: Number of sampling steps (10-1000)
-            diffusion_samples: Number of diffusion samples (1-5)
+            diffusion_samples: Number of diffusion samples (1-25)
             step_scale: Step scale for diffusion (0.5-5.0)
             msa_files: List of (file_path, format) tuples for MSA files
             msa: Pre-constructed MSA dictionary {database_name: {format: AlignmentFileRecord}}
@@ -427,12 +522,12 @@ class Boltz2Client:
         
         constraints = []
         if pocket_residues:
+            contacts = [
+                Contact(id=protein_id, residue_index=r) for r in pocket_residues
+            ]
             pocket_constraint = PocketConstraint(
-                ligand_id=ligand_id,
-                polymer_id=protein_id,
-                residue_ids=pocket_residues,
                 binder=ligand_id,
-                contacts=[]  # Leave empty to avoid server validation issues
+                contacts=contacts,
             )
             constraints.append(pocket_constraint)
         
@@ -456,7 +551,7 @@ class Boltz2Client:
         self,
         protein_sequence: str,
         ligand_ccd: str,  # Only CCD codes supported for covalent bonding
-        covalent_bonds: List[Tuple[int, str, str]] = None,
+        covalent_bonds: Optional[List[Tuple[int, str, str]]] = None,
         protein_id: str = "A",
         ligand_id: str = "LIG",
         recycling_steps: int = 3,
@@ -581,6 +676,91 @@ class Boltz2Client:
         
         return await self.predict(request, **kwargs)
 
+    async def predict_with_templates(
+        self,
+        sequence: str,
+        templates: List[Union[str, Path, StructuralTemplate]],
+        polymer_id: str = "A",
+        template_format: str = "cif",
+        recycling_steps: int = 3,
+        sampling_steps: int = 50,
+        diffusion_samples: int = 1,
+        step_scale: float = 1.638,
+        msa: Optional[Dict[str, Dict[str, AlignmentFileRecord]]] = None,
+        **kwargs
+    ) -> PredictionResponse:
+        """
+        Predict protein structure using structural templates for guidance.
+        
+        Structural templates can improve prediction accuracy by providing
+        structural information from homologous proteins.
+        
+        Args:
+            sequence: Protein sequence
+            templates: List of templates - can be file paths (str/Path) or StructuralTemplate objects
+            polymer_id: Polymer identifier
+            template_format: Format of template files ("cif" or "pdb") - used when templates are file paths
+            recycling_steps: Number of recycling steps (1-10)
+            sampling_steps: Number of sampling steps (10-1000)
+            diffusion_samples: Number of diffusion samples (1-25)
+            step_scale: Step scale for diffusion (0.5-5.0)
+            msa: Pre-constructed MSA dictionary
+            **kwargs: Additional parameters for predict()
+            
+        Returns:
+            Prediction response
+            
+        Example:
+            >>> result = await client.predict_with_templates(
+            ...     sequence="MKTVRQERLKS...",
+            ...     templates=["template1.cif", "template2.pdb"],
+            ...     template_format="cif"
+            ... )
+        """
+        # Process templates
+        structural_templates = []
+        for i, template in enumerate(templates):
+            if isinstance(template, StructuralTemplate):
+                structural_templates.append(template)
+            else:
+                # Load from file
+                template_path = Path(template)
+                if not template_path.exists():
+                    raise FileNotFoundError(f"Template file not found: {template_path}")
+                
+                content = template_path.read_text()
+                # Determine format from extension or use provided format
+                fmt = template_path.suffix.lower().lstrip('.')
+                if fmt not in ('cif', 'pdb'):
+                    fmt = template_format
+                
+                structural_templates.append(StructuralTemplate(
+                    structure=content,
+                    format=fmt,
+                    name=template_path.stem
+                ))
+        
+        if len(structural_templates) > 4:
+            raise Boltz2ValidationError("Maximum 4 structural templates allowed")
+        
+        polymer = Polymer(
+            id=polymer_id,
+            molecule_type="protein",
+            sequence=sequence,
+            msa=msa,
+            structural_templates=structural_templates
+        )
+        
+        request = PredictionRequest(
+            polymers=[polymer],
+            recycling_steps=recycling_steps,
+            sampling_steps=sampling_steps,
+            diffusion_samples=diffusion_samples,
+            step_scale=step_scale
+        )
+        
+        return await self.predict(request, **kwargs)
+
     async def predict_with_advanced_parameters(
         self,
         polymers: List[Polymer],
@@ -592,21 +772,31 @@ class Boltz2Client:
         step_scale: float = 1.638,
         without_potentials: bool = False,
         concatenate_msas: bool = False,
+        write_full_pae: bool = False,
+        write_full_pde: bool = False,
+        sampling_steps_affinity: int = 200,
+        diffusion_samples_affinity: int = 5,
+        affinity_mw_correction: bool = False,
         **kwargs
     ) -> PredictionResponse:
         """
         Predict structure with full control over all advanced parameters.
         
         Args:
-            polymers: List of polymers (proteins, DNA, RNA)
-            ligands: Optional list of ligands
+            polymers: List of polymers (proteins, DNA, RNA) - max 12
+            ligands: Optional list of ligands - max 20
             constraints: Optional list of constraints
-            recycling_steps: Number of recycling steps (1-6)
+            recycling_steps: Number of recycling steps (1-10)
             sampling_steps: Number of sampling steps (10-1000)
-            diffusion_samples: Number of diffusion samples (1-5)
+            diffusion_samples: Number of diffusion samples (1-25)
             step_scale: Step scale for diffusion sampling (0.5-5.0)
             without_potentials: Whether to run without potentials
             concatenate_msas: Whether to concatenate MSAs
+            write_full_pae: Whether to return full PAE matrix in response
+            write_full_pde: Whether to return full PDE matrix in response
+            sampling_steps_affinity: Sampling steps for affinity prediction (10-1000)
+            diffusion_samples_affinity: Diffusion samples for affinity prediction (1-10)
+            affinity_mw_correction: Enable molecular weight correction for affinity
             **kwargs: Additional parameters for predict()
             
         Returns:
@@ -621,7 +811,12 @@ class Boltz2Client:
             diffusion_samples=diffusion_samples,
             step_scale=step_scale,
             without_potentials=without_potentials,
-            concatenate_msas=concatenate_msas
+            concatenate_msas=concatenate_msas,
+            write_full_pae=write_full_pae,
+            write_full_pde=write_full_pde,
+            sampling_steps_affinity=sampling_steps_affinity,
+            diffusion_samples_affinity=diffusion_samples_affinity,
+            affinity_mw_correction=affinity_mw_correction,
         )
         
         return await self.predict(request, **kwargs)
@@ -632,7 +827,7 @@ class Boltz2Client:
         msa_dir: Optional[Path] = None,
         save_structures: bool = True,
         output_dir: Optional[Path] = None,
-        progress_callback: Optional[callable] = None,
+        progress_callback: Optional[Callable] = None,
         recycling_steps: Optional[int] = None,
         sampling_steps: Optional[int] = None,
         diffusion_samples: Optional[int] = None,
@@ -829,7 +1024,7 @@ class Boltz2Client:
             databases: List of databases to search (default: ["all"])
             e_value: E-value threshold for hits
             max_msa_sequences: Maximum sequences in MSA
-            output_format: Output format if saving ("a3m", "fasta", "sto")
+            output_format: Output format if saving ("a3m" or "fasta")
             save_path: Path to save MSA file
             **kwargs: Additional search parameters
             
@@ -884,9 +1079,9 @@ class Boltz2Client:
             databases: Databases to search for MSA
             e_value: E-value threshold for MSA
             max_msa_sequences: Maximum sequences in MSA
-            recycling_steps: Number of recycling steps (1-6)
+            recycling_steps: Number of recycling steps (1-10)
             sampling_steps: Number of sampling steps (10-1000)
-            diffusion_samples: Number of diffusion samples (1-5)
+            diffusion_samples: Number of diffusion samples (1-25)
             step_scale: Step scale factor (0.5-5.0)
             **kwargs: Additional parameters
             
@@ -951,7 +1146,7 @@ class Boltz2Client:
         Args:
             sequences: Dict mapping sequence IDs to sequences
             output_dir: Directory to save MSA files
-            output_format: Output format ("a3m", "fasta", "sto")
+            output_format: Output format ("a3m" or "fasta")
             databases: Databases to search
             e_value: E-value threshold
             max_msa_sequences: Maximum sequences per MSA
@@ -1010,7 +1205,7 @@ class Boltz2Client:
             e_value: E-value threshold for MSA search
             max_msa_sequences: Maximum sequences in MSA
             pocket_residues: List of residue indices defining binding pocket
-            recycling_steps: Number of recycling steps (1-6)
+            recycling_steps: Number of recycling steps (1-10)
             sampling_steps: Number of sampling steps (10-1000)
             predict_affinity: Enable affinity prediction for this ligand
             sampling_steps_affinity: Sampling steps for affinity prediction
@@ -1184,7 +1379,7 @@ class Boltz2Client:
         output_path = Path(output_path)
         
         # Convert to dict and save as YAML
-        config_dict = config.dict(exclude_none=True)
+        config_dict = config.model_dump(exclude_none=True)
         
         with open(output_path, 'w') as f:
             yaml.dump(config_dict, f, default_flow_style=False, sort_keys=False)
@@ -1195,7 +1390,7 @@ class Boltz2Client:
         self,
         response: PredictionResponse,
         output_dir: Path,
-        progress_callback: Optional[callable] = None
+        progress_callback: Optional[Callable] = None
     ) -> List[Path]:
         """Save prediction structures to files."""
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -1229,7 +1424,7 @@ class Boltz2Client:
         if getattr(response, "affinities", None):
             affinities_file = output_dir / "affinities.json"
             try:
-                affinities_file.write_text(json.dumps(response.affinities, default=lambda o: o.dict() if hasattr(o, 'dict') else o, indent=2))
+                affinities_file.write_text(json.dumps(response.affinities, default=lambda o: o.model_dump() if hasattr(o, 'model_dump') else o, indent=2))
                 saved_files.append(affinities_file)
                 if progress_callback:
                     progress_callback(f"Saved affinities to {affinities_file}")
@@ -1260,7 +1455,9 @@ class Boltz2SyncClient:
         max_retries: int = 3,
         retry_delay: float = 1.0,
         poll_seconds: int = 10,
-        console: Optional[Console] = None
+        console: Optional[Console] = None,
+        sagemaker_endpoint_name: Optional[str] = None,
+        sagemaker_region: Optional[str] = None,
     ):
         """Initialize the synchronous client."""
         self._async_client = Boltz2Client(
@@ -1271,7 +1468,9 @@ class Boltz2SyncClient:
             max_retries=max_retries,
             retry_delay=retry_delay,
             poll_seconds=poll_seconds,
-            console=console
+            console=console,
+            sagemaker_endpoint_name=sagemaker_endpoint_name,
+            sagemaker_region=sagemaker_region,
         )
     
     @property
@@ -1315,6 +1514,10 @@ class Boltz2SyncClient:
     def predict_with_advanced_parameters(self, **kwargs) -> PredictionResponse:
         """Make prediction with full parameter control."""
         return asyncio.run(self._async_client.predict_with_advanced_parameters(**kwargs))
+    
+    def predict_with_templates(self, **kwargs) -> PredictionResponse:
+        """Predict protein structure using structural templates for guidance."""
+        return asyncio.run(self._async_client.predict_with_templates(**kwargs))
     
     def configure_msa_search(
         self,
@@ -1438,6 +1641,30 @@ class Boltz2SyncClient:
             affinity_mw_correction=affinity_mw_correction,
             **kwargs
         ))
+    
+    def predict_from_yaml_config(
+        self,
+        yaml_config: Union[str, Path, YAMLConfig],
+        **kwargs
+    ) -> PredictionResponse:
+        """Predict from a YAML configuration."""
+        return asyncio.run(self._async_client.predict_from_yaml_config(yaml_config, **kwargs))
+    
+    def predict_from_yaml_file(
+        self,
+        yaml_file: Union[str, Path],
+        **kwargs
+    ) -> PredictionResponse:
+        """Predict from a YAML file."""
+        return asyncio.run(self._async_client.predict_from_yaml_file(yaml_file, **kwargs))
+    
+    def create_yaml_config(self, **kwargs) -> YAMLConfig:
+        """Create a YAML configuration."""
+        return self._async_client.create_yaml_config(**kwargs)
+    
+    def save_yaml_config(self, config: YAMLConfig, output_path: Union[str, Path]) -> Path:
+        """Save a YAML configuration to file."""
+        return self._async_client.save_yaml_config(config, output_path)
     
     def get_msa_databases(self) -> Dict[str, Any]:
         """Get MSA database configurations."""

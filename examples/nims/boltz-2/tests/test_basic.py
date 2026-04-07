@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------
-# Copyright (c) 2025, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
 # ---------------------------------------------------------------
 
 """
@@ -9,7 +9,7 @@ These tests verify that the package can be imported and basic functionality work
 """
 
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, AsyncMock, patch
 
 from boltz2_client import (
     Boltz2Client,
@@ -18,9 +18,7 @@ from boltz2_client import (
     Polymer,
     Ligand,
     get_version,
-    check_health,
 )
-from boltz2_client.exceptions import Boltz2ValidationError
 from boltz2_client.utils import validate_sequence, calculate_sequence_stats
 
 
@@ -130,21 +128,23 @@ def test_client_initialization():
     assert sync_client._async_client.base_url == "http://localhost:8000"
 
 
-@patch('httpx.AsyncClient')
-async def test_health_check_mock(mock_client):
+@pytest.mark.asyncio
+@patch('boltz2_client.client.httpx.AsyncClient')
+async def test_health_check_mock(mock_client_cls):
     """Test health check with mocked response."""
-    # Mock successful response
-    mock_response = Mock()
+    mock_response = AsyncMock()
     mock_response.status_code = 200
-    
-    mock_client_instance = Mock()
+    mock_response.raise_for_status = Mock()
+
+    mock_client_instance = AsyncMock()
     mock_client_instance.get.return_value = mock_response
-    mock_client.return_value.__aenter__.return_value = mock_client_instance
-    
+
+    mock_client_cls.return_value.__aenter__.return_value = mock_client_instance
+
     client = Boltz2Client("http://localhost:8000")
     result = await client.health_check()
-    
-    assert result is True
+
+    assert result.status == "healthy"
 
 
 def test_imports():

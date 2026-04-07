@@ -10,6 +10,7 @@ This directory contains license files for all third-party dependencies used in t
 | pydantic | MIT | [pydantic-LICENSE](pydantic-LICENSE) |
 | typing-extensions | Python Software Foundation License | [typing-extensions-LICENSE](typing-extensions-LICENSE) |
 | aiofiles | Apache 2.0 | [aiofiles-LICENSE](aiofiles-LICENSE) |
+| aiohttp | Apache 2.0 | [aiohttp-LICENSE](aiohttp-LICENSE) |
 | rich | MIT | [rich-LICENSE](rich-LICENSE) |
 | click | BSD 3-Clause | [click-LICENSE](click-LICENSE) |
 | PyYAML | MIT | [PyYAML-LICENSE](PyYAML-LICENSE) |

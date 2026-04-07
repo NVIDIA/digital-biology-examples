@@ -1,0 +1,23 @@
+{
+  "timestamp": "2025-09-17T22:52:19.225113",
+  "protein": {
+    "name": "CDK4",
+    "sequence_length": 303,
+    "msa_sequences": 1
+  },
+  "ligand": {
+    "name": "Palbociclib",
+    "smiles": "CC1=C(C(=O)N(C2=NC(=NC=C12)NC3=NC=C(C=C3)N4CCNCC4)C5CCCC5)C(=O)C",
+    "known_ic50_nm": 11
+  },
+  "structure_confidence": {
+    "overall": 0.9146000146865845,
+    "ptm": 0.9296677112579346,
+    "plddt": 0.9005017280578613
+  },
+  "affinity_predictions": {
+    "pic50": 8.875988852262498,
+    "ic50_nm": 1.3304885693375532,
+    "binding_probability": 0.43468648195266724
+  }
+}

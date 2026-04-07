@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# ---------------------------------------------------------------
+# Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
+# ---------------------------------------------------------------
+
 """
 02_protein_structure_prediction_with_msa.py
 
@@ -25,7 +29,7 @@ PROTEIN_SEQUENCE = (
 )
 
 # Path to MSA file (A3M format with evolutionary sequences)
-MSA_FILE_PATH = Path(__file__).parent / "msa-kras-g12c_combined.a3m"
+MSA_FILE_PATH = Path(__file__).parent / "data" / "msa-kras-g12c_combined.a3m"
 
 
 async def predict_without_msa(client: Boltz2Client) -> dict:

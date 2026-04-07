@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# ---------------------------------------------------------------
+# Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
+# ---------------------------------------------------------------
+
 """
 Comprehensive Multi-Endpoint Stress Test for Boltz2 NIM
 
@@ -10,6 +14,7 @@ This test validates the multi-endpoint client under high load:
 """
 
 import asyncio
+import os
 import time
 import json
 import csv
@@ -22,6 +27,8 @@ from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
 
 from boltz2_client import MultiEndpointClient, LoadBalanceStrategy, PredictionRequest, PredictionResponse
+
+BOLTZ2_NIM_URL = os.getenv("BOLTZ2_NIM_URL", "http://localhost:8000")
 
 # Test data
 PROTEIN_SEQUENCES = [
@@ -213,14 +220,9 @@ class TestComprehensiveStress:
     def stress_client(self):
         """Create a multi-endpoint client for stress testing."""
         return MultiEndpointClient(
-            endpoints=[
-                "http://localhost:8000",
-                "http://localhost:8001", 
-                "http://localhost:8002",
-                "http://localhost:8003"
-            ],
-            strategy=LoadBalanceStrategy.LEAST_LOADED,  # Changed back to LEAST_LOADED for max resource utilization
-            timeout=600.0,  # 10 minutes timeout
+            endpoints=[BOLTZ2_NIM_URL],
+            strategy=LoadBalanceStrategy.LEAST_LOADED,
+            timeout=600.0,
             max_retries=3,
             is_async=True
         )
@@ -622,52 +624,5 @@ class TestComprehensiveStress:
         
         return summary
 
-# Main execution function
-async def run_comprehensive_stress_test():
-    """Run the comprehensive stress test."""
-    console = Console()
-    
-    console.print("[bold red]🚀 COMPREHENSIVE MULTI-ENDPOINT STRESS TEST[/bold red]")
-    console.print("=" * 60)
-    
-    # Create client
-    client = MultiEndpointClient(
-        endpoints=[
-            "http://localhost:8000",
-            "http://localhost:8001", 
-            "http://localhost:8002",
-            "http://localhost:8003"
-        ],
-        strategy=LoadBalanceStrategy.LEAST_LOADED,
-        timeout=600.0,
-        max_retries=3,
-        is_async=True
-    )
-    
-    # Create results storage
-    results = ResultsStorage()
-    
-    try:
-        # Test 1: 50 protein sequences
-        console.print("\n[bold blue]Phase 1: Protein Structure Predictions[/bold blue]")
-        await test_50_protein_sequences(client, results)
-        
-        # Test 2: Protein-ligand complexes
-        console.print("\n[bold blue]Phase 2: Protein-Ligand Complex Predictions[/bold blue]")
-        await test_protein_ligand_complexes(client, results)
-        
-        # Test 3: Analysis and saving
-        console.print("\n[bold blue]Phase 3: Analysis and Results Saving[/bold blue]")
-        summary = await test_comprehensive_analysis(client, results)
-        
-        console.print(f"\n[bold green]🎉 COMPREHENSIVE STRESS TEST COMPLETED SUCCESSFULLY![/bold green]")
-        return summary
-        
-    except Exception as e:
-        console.print(f"\n[bold red]❌ Test failed: {str(e)}[/bold red]")
-        results.errors.append(f"Test execution failed: {str(e)}")
-        return None
-
 if __name__ == "__main__":
-    # Run the test
-    asyncio.run(run_comprehensive_stress_test())
+    pytest.main([__file__, "-v", "-m", "real_endpoint"])

@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------
-# Copyright (c) 2025, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
 # ---------------------------------------------------------------
 
 """
@@ -20,7 +20,7 @@ from rich.console import Console
 
 from .client import Boltz2Client, Boltz2SyncClient, EndpointType
 from .models import PredictionRequest, PredictionResponse, HealthStatus, ServiceMetadata, AlignmentFileRecord
-from .exceptions import Boltz2APIError, Boltz2TimeoutError
+from .exceptions import Boltz2APIError
 
 
 class LoadBalanceStrategy(Enum):
@@ -39,6 +39,8 @@ class EndpointConfig:
     endpoint_type: str = EndpointType.LOCAL
     weight: float = 1.0  # For weighted load balancing
     max_concurrent_requests: int = 10
+    sagemaker_endpoint_name: Optional[str] = None
+    sagemaker_region: Optional[str] = None
     
 
 @dataclass
@@ -65,7 +67,7 @@ class MultiEndpointClient:
     def __init__(
         self,
         endpoints: List[Union[EndpointConfig, Dict[str, Any], str]],
-        strategy: LoadBalanceStrategy = LoadBalanceStrategy.ROUND_ROBIN,
+        strategy: LoadBalanceStrategy = LoadBalanceStrategy.LEAST_LOADED,
         health_check_interval: float = 60.0,
         timeout: float = 300.0,
         max_retries: int = 3,
@@ -144,7 +146,9 @@ class MultiEndpointClient:
             timeout=self.timeout,
             max_retries=self.max_retries,
             retry_delay=self.retry_delay,
-            console=self.console
+            console=self.console,
+            sagemaker_endpoint_name=config.sagemaker_endpoint_name,
+            sagemaker_region=config.sagemaker_region,
         )
     
     async def _health_check_loop(self):
@@ -253,12 +257,13 @@ class MultiEndpointClient:
         
         return healthy_endpoints[0]
     
-    async def predict(self, request: PredictionRequest) -> PredictionResponse:
+    async def predict(self, request: PredictionRequest, save_structures: bool = True) -> PredictionResponse:
         """
         Make a prediction using load balancing across endpoints.
         
         Args:
             request: Prediction request
+            save_structures: Whether to save structures to files (default: True)
             
         Returns:
             PredictionResponse from the successful endpoint
@@ -293,9 +298,9 @@ class MultiEndpointClient:
                 
                 # Make the request
                 if self.is_async:
-                    response = await endpoint.client.predict(request)
+                    response = await endpoint.client.predict(request, save_structures=save_structures)
                 else:
-                    response = endpoint.client.predict(request)
+                    response = endpoint.client.predict(request, save_structures=save_structures)
                 
                 # Update statistics
                 elapsed = time.time() - start_time
@@ -406,9 +411,9 @@ class MultiEndpointClient:
         Args:
             sequence: Protein amino acid sequence
             polymer_id: Polymer identifier (default: A)
-            recycling_steps: Number of recycling steps (1-6)
+            recycling_steps: Number of recycling steps (1-10)
             sampling_steps: Number of sampling steps (10-1000)
-            diffusion_samples: Number of diffusion samples (1-5)
+            diffusion_samples: Number of diffusion samples (1-25)
             step_scale: Step scale for diffusion sampling (0.5-5.0)
             msa_files: List of (file_path, format) tuples for MSA guidance
             save_structures: Whether to save structure files
