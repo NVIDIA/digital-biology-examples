@@ -9,14 +9,26 @@ Provides high-level APIs for virtual screening campaigns with
 automatic parallelization, result analysis, and visualization.
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Union, Any, Tuple, Callable
+from typing import TYPE_CHECKING, Dict, List, Optional, Union, Any, Tuple, Callable
 from concurrent.futures import ThreadPoolExecutor
-import pandas as pd
+
+if TYPE_CHECKING:
+    # ``pandas`` is an optional dependency that is only required by the
+    # CSV-loading and DataFrame-result helpers on this module. The module
+    # used to ``import pandas as pd`` at the top, which made the entire
+    # ``boltz2_client`` package un-importable on a clean install (pandas is
+    # a ``[dev]`` extra, not a runtime dep). The runtime import is now
+    # deferred into the methods that actually need it; this block only
+    # exists so static type checkers and IDEs can still resolve the
+    # ``pd.DataFrame`` annotations on those methods.
+    import pandas as pd
 
 from .client import Boltz2Client, Boltz2SyncClient
 from .models import Polymer, Ligand, PredictionRequest, Contact, PocketConstraint
@@ -45,6 +57,8 @@ class CompoundLibrary:
                  smiles_col: str = "smiles",
                  ccd_col: Optional[str] = None) -> "CompoundLibrary":
         """Load compound library from CSV file."""
+        import pandas as pd
+
         df = pd.read_csv(csv_path)
         compounds = []
         
@@ -134,8 +148,10 @@ class VirtualScreeningResult:
             return 0.0
         return len(self.successful_results) / len(self.results)
     
-    def to_dataframe(self) -> pd.DataFrame:
+    def to_dataframe(self) -> "pd.DataFrame":
         """Convert results to pandas DataFrame."""
+        import pandas as pd
+
         return pd.DataFrame(self.successful_results)
     
     def save_results(self, output_dir: Union[str, Path], 
@@ -189,16 +205,20 @@ class VirtualScreeningResult:
         
         return saved_files
     
-    def get_top_hits(self, n: int = 10, by: str = "predicted_pic50") -> pd.DataFrame:
+    def get_top_hits(self, n: int = 10, by: str = "predicted_pic50") -> "pd.DataFrame":
         """Get top N compounds by specified metric."""
+        import pandas as pd
+
         df = self.to_dataframe()
         if df.empty or by not in df.columns:
             return pd.DataFrame()
         
         return df.nlargest(n, by)
     
-    def get_statistics_by_group(self, group_by: str = "compound_type") -> pd.DataFrame:
+    def get_statistics_by_group(self, group_by: str = "compound_type") -> "pd.DataFrame":
         """Get statistics grouped by a metadata field."""
+        import pandas as pd
+
         df = self.to_dataframe()
         if df.empty or group_by not in df.columns:
             return pd.DataFrame()
