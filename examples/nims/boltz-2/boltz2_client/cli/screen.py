@@ -44,10 +44,14 @@ def screen(ctx, target_sequence, compounds_file, target_name, output_dir, no_aff
         boltz2 screen "MKTVRQERLK..." compounds.csv -o results/
         boltz2 screen target.fasta library.json --pocket-residues "10,15,20,25"
     """
-    client = create_client(ctx)
-    
     # Import here to avoid circular imports
     from ..virtual_screening import VirtualScreening, CompoundLibrary
+    
+    try:
+        client = create_client(ctx)
+    except Exception as e:
+        print_error(f"Failed to initialize client: {e}")
+        raise click.Abort()
     
     console.print(f"\n[bold cyan]🧬 Virtual Screening Campaign[/bold cyan]")
     console.print(f"Target: {target_name}")
@@ -64,7 +68,11 @@ def screen(ctx, target_sequence, compounds_file, target_name, output_dir, no_aff
     # Parse pocket residues
     pocket_residues_list = None
     if pocket_residues:
-        pocket_residues_list = [int(x.strip()) for x in pocket_residues.split(',')]
+        try:
+            pocket_residues_list = [int(x.strip()) for x in pocket_residues.split(',')]
+        except ValueError as e:
+            print_error(f"Invalid --pocket-residues value (expected comma-separated ints): {e}")
+            raise click.Abort()
         console.print(f"Pocket constraint: {len(pocket_residues_list)} residues")
     
     # Create screener

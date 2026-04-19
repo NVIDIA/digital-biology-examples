@@ -243,8 +243,6 @@ class Boltz2Client:
         self, request_dict: dict, progress_callback: Optional[Callable] = None
     ) -> dict:
         """Invoke a SageMaker endpoint and return the parsed JSON response."""
-        import asyncio
-
         def _invoke():
             return self._sm_runtime.invoke_endpoint(
                 EndpointName=self._sm_endpoint_name,
@@ -256,7 +254,10 @@ class Boltz2Client:
         if progress_callback:
             progress_callback(f"Invoking SageMaker endpoint {self._sm_endpoint_name}...")
 
-        loop = asyncio.get_event_loop()
+        # Always run the blocking boto3 call in a worker thread. Use the
+        # currently running loop (asyncio.get_event_loop is deprecated for
+        # this purpose in Python 3.10+ and emits a DeprecationWarning).
+        loop = asyncio.get_running_loop()
         response = await loop.run_in_executor(None, _invoke)
 
         http_status = response["ResponseMetadata"]["HTTPStatusCode"]

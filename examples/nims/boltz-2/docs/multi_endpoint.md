@@ -452,6 +452,41 @@ If all endpoints fail, the client will raise a `Boltz2APIError`. Check:
 3. GPU memory availability
 4. Docker container status
 
+### "All endpoints failed" cascade after only one endpoint glitched
+
+> Fixed in **0.5.2**.
+
+Earlier releases (≤ 0.5.1) marked an endpoint permanently unhealthy after
+three transient failures because `failed_requests` was never reset on a
+subsequent success. With many concurrent screening calls in flight, a
+single flaky endpoint could cascade into all-endpoints-failed even when
+the underlying NIMs were healthy. As of 0.5.2:
+
+- successful predictions reset `failed_requests` on every `predict_*`
+  method;
+- the dispatcher's `_select_endpoint()` honours the per-request
+  attempted-endpoints set so it cannot keep re-picking the same dead
+  endpoint inside one dispatch loop;
+- the background health-check loop now runs an immediate probe on
+  startup so transient unreachability at construction time is detected
+  without waiting a full `health_check_interval`;
+- `health_check_sync()` correctly normalises the underlying
+  `HealthStatus` object to a boolean so the synchronous recovery path
+  works.
+
+If you observe similar symptoms on 0.5.2 or newer, capture the output of
+`multi_client.print_status()` and attach to a bug report — this should
+no longer occur.
+
+### Synchronous `with MultiEndpointClient(...)` previously crashed
+
+> Fixed in **0.5.2**.
+
+The synchronous context-manager exit used to call `asyncio.create_task`
+unconditionally, which raises when there is no running event loop. From
+0.5.2 onward, `__exit__` is loop-aware and `with` blocks are safe in
+plain synchronous code. Async callers should still prefer `async with`.
+
 ### Uneven Load Distribution
 
 If load is not distributed evenly:

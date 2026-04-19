@@ -152,7 +152,21 @@ class MultiEndpointClient:
         )
     
     async def _health_check_loop(self):
-        """Background task to periodically check endpoint health."""
+        """Background task to periodically check endpoint health.
+        
+        Runs an immediate probe on startup so transient unreachability at
+        construction time is detected without waiting a full
+        ``health_check_interval``.
+        """
+        # Prime the health state so the first request does not race the
+        # background loop. Failures here are logged but never propagate.
+        try:
+            await self._check_all_endpoints_health()
+        except asyncio.CancelledError:
+            return
+        except Exception as e:
+            self.console.print(f"[red]Initial health check error: {e}[/red]")
+        
         while True:
             try:
                 await asyncio.sleep(self.health_check_interval)
@@ -227,34 +241,61 @@ class MultiEndpointClient:
             }
         return status
 
-    def _select_endpoint(self) -> Optional[EndpointStatus]:
-        """Select an endpoint based on the configured strategy."""
-        healthy_endpoints = self._get_healthy_endpoints()
-        
+    def _select_endpoint(
+        self,
+        attempted_endpoints: Optional[set] = None,
+    ) -> Optional[EndpointStatus]:
+        """Select an endpoint based on the configured strategy.
+
+        Args:
+            attempted_endpoints: Set of endpoint URLs already tried in the
+                current request. When provided, those endpoints are excluded
+                from the selection pool so the dispatcher cannot pick the same
+                failing endpoint repeatedly within a single request loop.
+        """
+        attempted_endpoints = attempted_endpoints or set()
+
+        def _filter(eps: List[EndpointStatus]) -> List[EndpointStatus]:
+            return [ep for ep in eps if ep.endpoint_config.base_url not in attempted_endpoints]
+
+        healthy_endpoints = _filter(self._get_healthy_endpoints())
+
         if not healthy_endpoints:
-            # Try all endpoints if none are marked healthy
-            healthy_endpoints = self.endpoints
-        
+            # Fall back to any not-yet-attempted endpoint, even if it was
+            # previously marked unhealthy. This gives recovered endpoints a
+            # chance and avoids "All endpoints failed" cascades when the
+            # background health check has not run yet.
+            healthy_endpoints = _filter(self.endpoints)
+
         if not healthy_endpoints:
             return None
-        
+
         if self.strategy == LoadBalanceStrategy.ROUND_ROBIN:
-            endpoint = healthy_endpoints[self._round_robin_index % len(healthy_endpoints)]
-            self._round_robin_index += 1
-            return endpoint
-        
+            # Anchor the rotation at the global counter, then scan forward
+            # until we land on a non-attempted endpoint. This preserves
+            # round-robin fairness across requests even when some endpoints
+            # are skipped within the current request.
+            n = len(self.endpoints)
+            for offset in range(n):
+                idx = (self._round_robin_index + offset) % n
+                candidate = self.endpoints[idx]
+                if candidate in healthy_endpoints:
+                    self._round_robin_index = idx + 1
+                    return candidate
+            return None
+
         elif self.strategy == LoadBalanceStrategy.RANDOM:
             return random.choice(healthy_endpoints)
-        
+
         elif self.strategy == LoadBalanceStrategy.LEAST_LOADED:
-            # Select endpoint with fewest current requests
+            # Select endpoint with fewest current requests.
             return min(healthy_endpoints, key=lambda ep: ep.current_requests)
-        
+
         elif self.strategy == LoadBalanceStrategy.WEIGHTED:
-            # Weighted random selection
+            # Weighted random selection.
             weights = [ep.endpoint_config.weight for ep in healthy_endpoints]
             return random.choices(healthy_endpoints, weights=weights)[0]
-        
+
         return healthy_endpoints[0]
     
     async def predict(self, request: PredictionRequest, save_structures: bool = True) -> PredictionResponse:
@@ -276,15 +317,16 @@ class MultiEndpointClient:
         
         # Try each endpoint until success
         while len(attempted_endpoints) < len(self.endpoints):
-            endpoint = self._select_endpoint()
+            endpoint = self._select_endpoint(attempted_endpoints=attempted_endpoints)
             
             if not endpoint:
                 break
                 
-            # Use endpoint URL as key since EndpointStatus is not hashable
+            # Use endpoint URL as key since EndpointStatus is not hashable.
+            # _select_endpoint already filters out previously attempted endpoints
+            # so this guard is a defensive backstop.
             endpoint_key = endpoint.endpoint_config.base_url
             if endpoint_key in attempted_endpoints:
-                # Already tried this endpoint
                 continue
             
             attempted_endpoints.add(endpoint_key)
@@ -308,6 +350,9 @@ class MultiEndpointClient:
                     (endpoint.average_response_time * (endpoint.total_requests - 1) + elapsed)
                     / endpoint.total_requests
                 )
+                # Reset transient-failure counter on success so a few earlier
+                # transient errors do not permanently disable a recovered endpoint.
+                endpoint.failed_requests = 0
                 
                 return response
                 
@@ -340,15 +385,16 @@ class MultiEndpointClient:
         
         # Try each endpoint until success
         while len(attempted_endpoints) < len(self.endpoints):
-            endpoint = self._select_endpoint()
+            endpoint = self._select_endpoint(attempted_endpoints=attempted_endpoints)
             
             if not endpoint:
                 break
                 
-            # Use endpoint URL as key since EndpointStatus is not hashable
+            # Use endpoint URL as key since EndpointStatus is not hashable.
+            # _select_endpoint already filters out previously attempted endpoints
+            # so this guard is a defensive backstop.
             endpoint_key = endpoint.endpoint_config.base_url
             if endpoint_key in attempted_endpoints:
-                # Already tried this endpoint
                 continue
             
             attempted_endpoints.add(endpoint_key)
@@ -369,6 +415,9 @@ class MultiEndpointClient:
                     (endpoint.average_response_time * (endpoint.total_requests - 1) + elapsed)
                     / endpoint.total_requests
                 )
+                # Reset transient-failure counter on success so a few earlier
+                # transient errors do not permanently disable a recovered endpoint.
+                endpoint.failed_requests = 0
                 
                 return response
                 
@@ -427,13 +476,14 @@ class MultiEndpointClient:
         attempted_endpoints = set()
         
         while len(attempted_endpoints) < len(self.endpoints):
-            endpoint = self._select_endpoint()
+            endpoint = self._select_endpoint(attempted_endpoints=attempted_endpoints)
             
             if not endpoint:
                 break
                 
             endpoint_key = endpoint.endpoint_config.base_url
             if endpoint_key in attempted_endpoints:
+                # Defensive backstop; _select_endpoint already filters.
                 continue
             
             attempted_endpoints.add(endpoint_key)
@@ -478,6 +528,9 @@ class MultiEndpointClient:
                     (endpoint.average_response_time * (endpoint.total_requests - 1) + elapsed)
                     / endpoint.total_requests
                 )
+                # Reset transient-failure counter on success so a few earlier
+                # transient errors do not permanently disable a recovered endpoint.
+                endpoint.failed_requests = 0
                 
                 return response
                 
@@ -523,13 +576,14 @@ class MultiEndpointClient:
         attempted_endpoints = set()
         
         while len(attempted_endpoints) < len(self.endpoints):
-            endpoint = self._select_endpoint()
+            endpoint = self._select_endpoint(attempted_endpoints=attempted_endpoints)
             
             if not endpoint:
                 break
                 
             endpoint_key = endpoint.endpoint_config.base_url
             if endpoint_key in attempted_endpoints:
+                # Defensive backstop; _select_endpoint already filters.
                 continue
             
             attempted_endpoints.add(endpoint_key)
@@ -582,6 +636,9 @@ class MultiEndpointClient:
                     (endpoint.average_response_time * (endpoint.total_requests - 1) + elapsed)
                     / endpoint.total_requests
                 )
+                # Reset transient-failure counter on success so a few earlier
+                # transient errors do not permanently disable a recovered endpoint.
+                endpoint.failed_requests = 0
                 
                 return response
                 
@@ -622,13 +679,14 @@ class MultiEndpointClient:
         attempted_endpoints = set()
         
         while len(attempted_endpoints) < len(self.endpoints):
-            endpoint = self._select_endpoint()
+            endpoint = self._select_endpoint(attempted_endpoints=attempted_endpoints)
             
             if not endpoint:
                 break
                 
             endpoint_key = endpoint.endpoint_config.base_url
             if endpoint_key in attempted_endpoints:
+                # Defensive backstop; _select_endpoint already filters.
                 continue
             
             attempted_endpoints.add(endpoint_key)
@@ -671,6 +729,9 @@ class MultiEndpointClient:
                     (endpoint.average_response_time * (endpoint.total_requests - 1) + elapsed)
                     / endpoint.total_requests
                 )
+                # Reset transient-failure counter on success so a few earlier
+                # transient errors do not permanently disable a recovered endpoint.
+                endpoint.failed_requests = 0
                 
                 return response
                 
@@ -711,13 +772,14 @@ class MultiEndpointClient:
         attempted_endpoints = set()
         
         while len(attempted_endpoints) < len(self.endpoints):
-            endpoint = self._select_endpoint()
+            endpoint = self._select_endpoint(attempted_endpoints=attempted_endpoints)
             
             if not endpoint:
                 break
                 
             endpoint_key = endpoint.endpoint_config.base_url
             if endpoint_key in attempted_endpoints:
+                # Defensive backstop; _select_endpoint already filters.
                 continue
             
             attempted_endpoints.add(endpoint_key)
@@ -760,6 +822,9 @@ class MultiEndpointClient:
                     (endpoint.average_response_time * (endpoint.total_requests - 1) + elapsed)
                     / endpoint.total_requests
                 )
+                # Reset transient-failure counter on success so a few earlier
+                # transient errors do not permanently disable a recovered endpoint.
+                endpoint.failed_requests = 0
                 
                 return response
                 
@@ -794,13 +859,14 @@ class MultiEndpointClient:
         attempted_endpoints = set()
         
         while len(attempted_endpoints) < len(self.endpoints):
-            endpoint = self._select_endpoint()
+            endpoint = self._select_endpoint(attempted_endpoints=attempted_endpoints)
             
             if not endpoint:
                 break
                 
             endpoint_key = endpoint.endpoint_config.base_url
             if endpoint_key in attempted_endpoints:
+                # Defensive backstop; _select_endpoint already filters.
                 continue
             
             attempted_endpoints.add(endpoint_key)
@@ -831,6 +897,9 @@ class MultiEndpointClient:
                     (endpoint.average_response_time * (endpoint.total_requests - 1) + elapsed)
                     / endpoint.total_requests
                 )
+                # Reset transient-failure counter on success so a few earlier
+                # transient errors do not permanently disable a recovered endpoint.
+                endpoint.failed_requests = 0
                 
                 return response
                 
@@ -865,13 +934,14 @@ class MultiEndpointClient:
         attempted_endpoints = set()
         
         while len(attempted_endpoints) < len(self.endpoints):
-            endpoint = self._select_endpoint()
+            endpoint = self._select_endpoint(attempted_endpoints=attempted_endpoints)
             
             if not endpoint:
                 break
                 
             endpoint_key = endpoint.endpoint_config.base_url
             if endpoint_key in attempted_endpoints:
+                # Defensive backstop; _select_endpoint already filters.
                 continue
             
             attempted_endpoints.add(endpoint_key)
@@ -902,6 +972,9 @@ class MultiEndpointClient:
                     (endpoint.average_response_time * (endpoint.total_requests - 1) + elapsed)
                     / endpoint.total_requests
                 )
+                # Reset transient-failure counter on success so a few earlier
+                # transient errors do not permanently disable a recovered endpoint.
+                endpoint.failed_requests = 0
                 
                 return response
                 
@@ -937,13 +1010,14 @@ class MultiEndpointClient:
         attempted_endpoints = set()
         
         while len(attempted_endpoints) < len(self.endpoints):
-            endpoint = self._select_endpoint()
+            endpoint = self._select_endpoint(attempted_endpoints=attempted_endpoints)
             
             if not endpoint:
                 break
                 
             endpoint_key = endpoint.endpoint_config.base_url
             if endpoint_key in attempted_endpoints:
+                # Defensive backstop; _select_endpoint already filters.
                 continue
             
             attempted_endpoints.add(endpoint_key)
@@ -976,6 +1050,9 @@ class MultiEndpointClient:
                     (endpoint.average_response_time * (endpoint.total_requests - 1) + elapsed)
                     / endpoint.total_requests
                 )
+                # Reset transient-failure counter on success so a few earlier
+                # transient errors do not permanently disable a recovered endpoint.
+                endpoint.failed_requests = 0
                 
                 return response
                 
@@ -1081,13 +1158,14 @@ class MultiEndpointClient:
         attempted_endpoints = set()
         
         while len(attempted_endpoints) < len(self.endpoints):
-            endpoint = self._select_endpoint()
+            endpoint = self._select_endpoint(attempted_endpoints=attempted_endpoints)
             
             if not endpoint:
                 break
                 
             endpoint_key = endpoint.endpoint_config.base_url
             if endpoint_key in attempted_endpoints:
+                # Defensive backstop; _select_endpoint already filters.
                 continue
             
             attempted_endpoints.add(endpoint_key)
@@ -1117,6 +1195,9 @@ class MultiEndpointClient:
                     (endpoint.average_response_time * (endpoint.total_requests - 1) + elapsed)
                     / endpoint.total_requests
                 )
+                # Reset transient-failure counter on success so a few earlier
+                # transient errors do not permanently disable a recovered endpoint.
+                endpoint.failed_requests = 0
                 
                 return response
                 
@@ -1159,13 +1240,14 @@ class MultiEndpointClient:
         attempted_endpoints = set()
         
         while len(attempted_endpoints) < len(self.endpoints):
-            endpoint = self._select_endpoint()
+            endpoint = self._select_endpoint(attempted_endpoints=attempted_endpoints)
             
             if not endpoint:
                 break
                 
             endpoint_key = endpoint.endpoint_config.base_url
             if endpoint_key in attempted_endpoints:
+                # Defensive backstop; _select_endpoint already filters.
                 continue
             
             attempted_endpoints.add(endpoint_key)
@@ -1195,6 +1277,9 @@ class MultiEndpointClient:
                     (endpoint.average_response_time * (endpoint.total_requests - 1) + elapsed)
                     / endpoint.total_requests
                 )
+                # Reset transient-failure counter on success so a few earlier
+                # transient errors do not permanently disable a recovered endpoint.
+                endpoint.failed_requests = 0
                 
                 return response
                 
@@ -1236,13 +1321,14 @@ class MultiEndpointClient:
         attempted_endpoints = set()
         
         while len(attempted_endpoints) < len(self.endpoints):
-            endpoint = self._select_endpoint()
+            endpoint = self._select_endpoint(attempted_endpoints=attempted_endpoints)
             
             if not endpoint:
                 break
                 
             endpoint_key = endpoint.endpoint_config.base_url
             if endpoint_key in attempted_endpoints:
+                # Defensive backstop; _select_endpoint already filters.
                 continue
             
             attempted_endpoints.add(endpoint_key)
@@ -1271,6 +1357,9 @@ class MultiEndpointClient:
                     (endpoint.average_response_time * (endpoint.total_requests - 1) + elapsed)
                     / endpoint.total_requests
                 )
+                # Reset transient-failure counter on success so a few earlier
+                # transient errors do not permanently disable a recovered endpoint.
+                endpoint.failed_requests = 0
                 
                 return response
                 
@@ -1312,13 +1401,14 @@ class MultiEndpointClient:
         attempted_endpoints = set()
         
         while len(attempted_endpoints) < len(self.endpoints):
-            endpoint = self._select_endpoint()
+            endpoint = self._select_endpoint(attempted_endpoints=attempted_endpoints)
             
             if not endpoint:
                 break
                 
             endpoint_key = endpoint.endpoint_config.base_url
             if endpoint_key in attempted_endpoints:
+                # Defensive backstop; _select_endpoint already filters.
                 continue
             
             attempted_endpoints.add(endpoint_key)
@@ -1347,6 +1437,9 @@ class MultiEndpointClient:
                     (endpoint.average_response_time * (endpoint.total_requests - 1) + elapsed)
                     / endpoint.total_requests
                 )
+                # Reset transient-failure counter on success so a few earlier
+                # transient errors do not permanently disable a recovered endpoint.
+                endpoint.failed_requests = 0
                 
                 return response
                 
@@ -1382,13 +1475,14 @@ class MultiEndpointClient:
         attempted_endpoints = set()
         
         while len(attempted_endpoints) < len(self.endpoints):
-            endpoint = self._select_endpoint()
+            endpoint = self._select_endpoint(attempted_endpoints=attempted_endpoints)
             
             if not endpoint:
                 break
                 
             endpoint_key = endpoint.endpoint_config.base_url
             if endpoint_key in attempted_endpoints:
+                # Defensive backstop; _select_endpoint already filters.
                 continue
             
             attempted_endpoints.add(endpoint_key)
@@ -1411,6 +1505,9 @@ class MultiEndpointClient:
                     (endpoint.average_response_time * (endpoint.total_requests - 1) + elapsed)
                     / endpoint.total_requests
                 )
+                # Reset transient-failure counter on success so a few earlier
+                # transient errors do not permanently disable a recovered endpoint.
+                endpoint.failed_requests = 0
                 
                 return response
                 
@@ -1446,13 +1543,14 @@ class MultiEndpointClient:
         attempted_endpoints = set()
         
         while len(attempted_endpoints) < len(self.endpoints):
-            endpoint = self._select_endpoint()
+            endpoint = self._select_endpoint(attempted_endpoints=attempted_endpoints)
             
             if not endpoint:
                 break
                 
             endpoint_key = endpoint.endpoint_config.base_url
             if endpoint_key in attempted_endpoints:
+                # Defensive backstop; _select_endpoint already filters.
                 continue
             
             attempted_endpoints.add(endpoint_key)
@@ -1475,6 +1573,9 @@ class MultiEndpointClient:
                     (endpoint.average_response_time * (endpoint.total_requests - 1) + elapsed)
                     / endpoint.total_requests
                 )
+                # Reset transient-failure counter on success so a few earlier
+                # transient errors do not permanently disable a recovered endpoint.
+                endpoint.failed_requests = 0
                 
                 return response
                 
@@ -1511,13 +1612,14 @@ class MultiEndpointClient:
         attempted_endpoints = set()
         
         while len(attempted_endpoints) < len(self.endpoints):
-            endpoint = self._select_endpoint()
+            endpoint = self._select_endpoint(attempted_endpoints=attempted_endpoints)
             
             if not endpoint:
                 break
                 
             endpoint_key = endpoint.endpoint_config.base_url
             if endpoint_key in attempted_endpoints:
+                # Defensive backstop; _select_endpoint already filters.
                 continue
             
             attempted_endpoints.add(endpoint_key)
@@ -1541,6 +1643,9 @@ class MultiEndpointClient:
                     (endpoint.average_response_time * (endpoint.total_requests - 1) + elapsed)
                     / endpoint.total_requests
                 )
+                # Reset transient-failure counter on success so a few earlier
+                # transient errors do not permanently disable a recovered endpoint.
+                endpoint.failed_requests = 0
                 
                 return response
                 
@@ -1571,7 +1676,16 @@ class MultiEndpointClient:
         
         for endpoint in self.endpoints:
             try:
-                is_healthy = endpoint.client.health_check()
+                # endpoint.client.health_check() returns a HealthStatus object,
+                # not a bool. Normalize to a boolean before storing on the
+                # EndpointStatus so failover logic and pretty-printers behave.
+                health = endpoint.client.health_check()
+                status_value = getattr(health, "status", health)
+                is_healthy = (
+                    (status_value == "healthy")
+                    if isinstance(status_value, str)
+                    else bool(health)
+                )
                 endpoint.is_healthy = is_healthy
                 endpoint.last_health_check = time.time()
                 
@@ -1580,8 +1694,6 @@ class MultiEndpointClient:
                     if endpoint.failed_requests > 0:
                         endpoint.failed_requests = 0
                         self.console.print(f"[green]Endpoint {endpoint.endpoint_config.base_url} recovered[/green]")
-                else:
-                    endpoint.is_healthy = False
                     
             except Exception:
                 endpoint.is_healthy = False
@@ -1674,8 +1786,30 @@ class MultiEndpointClient:
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.is_async:
-            asyncio.create_task(self.close())
+        """Synchronous context-manager exit.
+        
+        Avoids ``asyncio.create_task`` (which requires a running loop) so
+        ``with MultiEndpointClient(...)`` works in plain synchronous code.
+        Async callers should prefer ``async with`` which uses ``__aexit__``.
+        """
+        # Cancel the background health-check task if one was scheduled.
+        if self._health_check_task is not None and not self._health_check_task.done():
+            try:
+                self._health_check_task.cancel()
+            except Exception:
+                pass
+        # If we happen to be inside a running loop, schedule a graceful close;
+        # otherwise we have already cancelled the task above and there is
+        # nothing more to await.
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop is not None and self.is_async:
+            try:
+                loop.create_task(self.close())
+            except RuntimeError:
+                pass
     
     async def __aenter__(self):
         return self

@@ -22,6 +22,7 @@ from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn, BarColumn
 import yaml as pyyaml
 
+from .. import __version__ as _pkg_version
 from ..client import Boltz2Client
 from ..models import (
     PredictionRequest, Polymer, Ligand, BondConstraint,
@@ -53,6 +54,8 @@ def print_warning(message: str):
 
 
 @click.group()
+@click.version_option(_pkg_version, "-V", "--version", prog_name="boltz2",
+                      message="%(prog)s %(version)s")
 @click.option('--base-url', default='http://localhost:8000', help='Service base URL (can be comma-separated for multiple endpoints)')
 @click.option('--api-key', help='API key for NVIDIA hosted endpoints (or set NVIDIA_API_KEY env var)')
 @click.option('--endpoint-type',
