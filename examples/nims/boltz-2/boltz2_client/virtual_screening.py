@@ -450,13 +450,13 @@ class VirtualScreening:
             else:
                 response = self.client.predict(request)
             
-            # Extract results
+            # Extract results — guard against empty score/structure lists.
             result = {
                 "compound_name": compound["name"],
                 "compound_smiles": compound.get("smiles", ""),
                 "compound_ccd": compound.get("ccd", ""),
                 "structure_confidence": response.confidence_scores[0] if response.confidence_scores else None,
-                "structure_cif": response.structures[0].structure
+                "structure_cif": response.structures[0].structure if response.structures else None,
             }
             
             # Add metadata
@@ -467,11 +467,13 @@ class VirtualScreening:
             # Add affinity results if available
             if response.affinities and "LIG" in response.affinities:
                 affinity = response.affinities["LIG"]
-                result.update({
-                    "predicted_pic50": affinity.affinity_pic50[0],
-                    "predicted_ic50_nm": 10 ** (-affinity.affinity_pic50[0]) * 1e9,
-                    "binding_probability": affinity.affinity_probability_binary[0]
-                })
+                if affinity.affinity_pic50 and affinity.affinity_probability_binary:
+                    pic50 = affinity.affinity_pic50[0]
+                    result.update({
+                        "predicted_pic50": pic50,
+                        "predicted_ic50_nm": 10 ** (-pic50) * 1e9,
+                        "binding_probability": affinity.affinity_probability_binary[0],
+                    })
             
             return result
             
@@ -519,13 +521,13 @@ class VirtualScreening:
             # Run prediction
             response = await self.client.predict(request)
             
-            # Extract results (same as sync)
+            # Extract results (same as sync) — guard against empty lists.
             result = {
                 "compound_name": compound["name"],
                 "compound_smiles": compound.get("smiles", ""),
                 "compound_ccd": compound.get("ccd", ""),
                 "structure_confidence": response.confidence_scores[0] if response.confidence_scores else None,
-                "structure_cif": response.structures[0].structure
+                "structure_cif": response.structures[0].structure if response.structures else None,
             }
             
             # Add metadata
@@ -536,11 +538,13 @@ class VirtualScreening:
             # Add affinity results
             if response.affinities and "LIG" in response.affinities:
                 affinity = response.affinities["LIG"]
-                result.update({
-                    "predicted_pic50": affinity.affinity_pic50[0],
-                    "predicted_ic50_nm": 10 ** (-affinity.affinity_pic50[0]) * 1e9,
-                    "binding_probability": affinity.affinity_probability_binary[0]
-                })
+                if affinity.affinity_pic50 and affinity.affinity_probability_binary:
+                    pic50 = affinity.affinity_pic50[0]
+                    result.update({
+                        "predicted_pic50": pic50,
+                        "predicted_ic50_nm": 10 ** (-pic50) * 1e9,
+                        "binding_probability": affinity.affinity_probability_binary[0],
+                    })
             
             return result
             

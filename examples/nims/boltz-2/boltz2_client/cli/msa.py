@@ -115,8 +115,12 @@ def msa_search_command(ctx, sequence: str, endpoint: str, databases: List[str],
             
         except Exception as e:
             print_error(f"MSA search failed: {e}")
+            raise
     
-    asyncio.run(run_msa_search())
+    try:
+        asyncio.run(run_msa_search())
+    except Exception:
+        raise click.Abort()
 
 
 @cli.command(name='msa-predict')
@@ -233,8 +237,12 @@ def msa_predict_command(ctx, sequence: str, endpoint: str, databases: List[str],
             
         except Exception as e:
             print_error(f"MSA prediction failed: {e}")
+            raise
     
-    asyncio.run(run_msa_predict())
+    try:
+        asyncio.run(run_msa_predict())
+    except Exception:
+        raise click.Abort()
 
 
 @cli.command(name='msa-ligand')
@@ -380,8 +388,12 @@ def msa_ligand_command(ctx, protein_sequence: str, smiles: Optional[str], ccd: O
             
         except Exception as e:
             print_error(f"MSA-ligand prediction failed: {e}")
+            raise
     
-    asyncio.run(run_msa_ligand())
+    try:
+        asyncio.run(run_msa_ligand())
+    except Exception:
+        raise click.Abort()
 
 
 @cli.command(name='convert-msa')
@@ -779,8 +791,6 @@ def multimer_msa_command(ctx, a3m_files: Tuple[str, ...], chain_ids: str,
             
             # Save all outputs if requested
             if save_all:
-                import json
-                
                 # Collect all scores and metrics
                 scores = {
                     'confidence_scores': response.confidence_scores,

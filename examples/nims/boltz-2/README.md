@@ -6,7 +6,7 @@ Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A comprehensive Python client for NVIDIA's Boltz-2 biomolecular structure prediction service. This package provides both synchronous and asynchronous interfaces, a rich CLI, and built-in 3D visualization capabilities.
+A comprehensive Python client for NVIDIA's Boltz-2 biomolecular structure prediction service. This package provides both synchronous and asynchronous interfaces, a rich CLI, multi-endpoint load balancing, and notebook examples that visualize predicted structures with `py3Dmol` and Molstar.
 
 ## Features
 

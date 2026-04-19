@@ -26,7 +26,7 @@ Example:
     >>> print(f"Confidence: {result.confidence_scores[0]:.3f}")
 """
 
-__version__ = "0.5.1"
+__version__ = "0.5.2"
 __author__ = "NVIDIA Corporation"
 __email__ = "bionemo-support@nvidia.com"
 
@@ -102,28 +102,6 @@ from .utils import (
     convert_cif_to_pdb,
     convert_pdb_to_cif,
 )
-
-# Optional imports for visualization
-try:
-    from .visualization import (
-        StructureVisualizer,
-        visualize_structure,
-        create_multi_view,
-    )
-    _HAS_VISUALIZATION = True
-except ImportError:
-    _HAS_VISUALIZATION = False
-
-# Optional imports for analysis
-try:
-    from .analysis import (
-        StructureAnalyzer,
-        calculate_rmsd,
-        analyze_contacts,
-    )
-    _HAS_ANALYSIS = True
-except ImportError:
-    _HAS_ANALYSIS = False
 
 __all__ = [
     # Core client classes
@@ -201,21 +179,6 @@ __all__ = [
     "SPECIES_TO_TAXID",
 ]
 
-# Add visualization exports if available
-if _HAS_VISUALIZATION:
-    __all__.extend([
-        "StructureVisualizer",
-        "visualize_structure", 
-        "create_multi_view",
-    ])
-
-# Add analysis exports if available
-if _HAS_ANALYSIS:
-    __all__.extend([
-        "StructureAnalyzer",
-        "calculate_rmsd",
-        "analyze_contacts",
-    ])
 
 def get_version() -> str:
     """Get the current version of the package."""
