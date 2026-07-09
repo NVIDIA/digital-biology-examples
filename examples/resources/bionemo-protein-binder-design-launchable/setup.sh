@@ -1,83 +1,104 @@
 #!/usr/bin/env bash
 # Copyright (c) 2026, NVIDIA CORPORATION. Licensed under the Apache License, Version 2.0 (the "License") you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
 #
-# Brev Launchable setup script (VM Mode, Ubuntu 22.04+, 1x A100 80GB) for the
-# de novo protein binder design workflow using NVIDIA Proteina-Complexa +
-# Boltz-2 (local NIM). Idempotent + phase-marked; safe to re-run.
+# Brev Launchable setup script (VM Mode, Ubuntu 22.04+, 1x A100 80GB) for the de novo protein binder
+# design workflow using NVIDIA Proteina-Complexa + Boltz-2 (local NIM). Idempotent + phase-marked.
 #
-# Secrets (set in the Brev deploy env / your shell):
+# Builds everything (Complexa + weights + AF2 params + Boltz-2 NIM cache) on the LARGEST writable
+# volume, because cloud GPU instances often have a tiny root disk (e.g. 97 GB) plus a big scratch
+# volume (e.g. /ephemeral). Override the location with PBD_WORK=/path.
+#
+# Secrets (set in the pasted startup script / your shell):
 #   NGC_API_KEY   required for the local Boltz-2 NIM (image pull + weights).
 #                 (Proteina-Complexa + AF2 weights are public; no key needed.)
 #
-# Produces ~/.complexa_env (source it before running the notebook) and leaves a
-# local Boltz-2 NIM on :8000. Logs to ~/complexa_setup.log.
+# Produces ~/.complexa_env, registers a "Python (Complexa)" Jupyter kernel, and serves a
+# widget-capable JupyterLab on :8888. Logs to ~/complexa_setup.log.
 set -uo pipefail
 LOG="$HOME/complexa_setup.log"
 exec > >(tee -a "$LOG") 2>&1
 mark() { echo "=== [$(date +%H:%M:%S)] $* ==="; }
+SETUP_FAIL=0
+fail() { echo "!!! ERROR: $*"; SETUP_FAIL=1; }
 export DEBIAN_FRONTEND=noninteractive
 export PATH="$HOME/.local/bin:$PATH"
 
 AGENT_TOOLKIT_REPO="${AGENT_TOOLKIT_REPO:-https://github.com/NVIDIA-BioNeMo/bionemo-agent-toolkit}"
 COMPLEXA_GIT="${COMPLEXA_GIT:-https://github.com/NVIDIA-Digital-Bio/Proteina-Complexa}"
 BOLTZ2_IMAGE="${BOLTZ2_IMAGE:-nvcr.io/nim/mit/boltz2:latest}"
-WORK="$HOME"
+MIN_FREE_GB="${PBD_MIN_FREE_GB:-90}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo "$HOME")"
+
+# --- pick a work dir on the largest writable volume (root disks are often tiny) -------------------
+pick_workdir() {
+    local best="$HOME" bestkb=0 d kb
+    for d in "${PBD_WORK:-}" /ephemeral /raid /scratch /workspace /data /mnt/* "$HOME"; do
+        [ -n "$d" ] && [ -d "$d" ] || continue
+        mkdir -p "$d/.pbd_wtest" 2>/dev/null || continue
+        rmdir "$d/.pbd_wtest" 2>/dev/null || true
+        kb=$(df -Pk "$d" 2>/dev/null | awk 'NR==2{print $4}')
+        [ -n "$kb" ] || continue
+        if [ "$kb" -gt "$bestkb" ]; then bestkb=$kb; best=$d; fi
+    done
+    printf '%s' "$best"
+}
+WORK="$(pick_workdir)/complexa-binder-design"
+if ! mkdir -p "$WORK" 2>/dev/null; then WORK="$HOME/complexa-binder-design"; mkdir -p "$WORK"; fi
 COMPLEXA_REPO="$WORK/Proteina-Complexa"
 SKILL_ROOT="$WORK/bionemo-agent-toolkit"
 SKILL="$SKILL_ROOT/workflows/generative_protein_binder_design/complexa-binder-design"
+NIMCACHE="$WORK/nimcache_boltz2"
+AF2_DIR="$SKILL/community_models/ckpts/AF2"
+FREE_GB=$(( $(df -Pk "$WORK" 2>/dev/null | awk 'NR==2{print $4}') / 1024 / 1024 ))
 
 # ---------------------------------------------------------------------------
-mark "Phase 0: base packages + uv"
+mark "Phase 0: base packages + uv  (work dir: $WORK — ${FREE_GB} GB free)"
+if [ "$FREE_GB" -lt "$MIN_FREE_GB" ]; then
+    echo "!!! WARNING: only ${FREE_GB} GB free on $WORK (need ~${MIN_FREE_GB} GB)."
+    echo "!!! Set PBD_WORK to a larger volume, or deploy with a bigger disk. Continuing anyway..."
+fi
 sudo apt-get update -y >/dev/null 2>&1 || true
 sudo apt-get install -y git curl wget unzip build-essential >/dev/null 2>&1 || true
-if ! command -v uv >/dev/null 2>&1; then
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-fi
+command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh
 export PATH="$HOME/.local/bin:$PATH"
-uv --version || { echo "uv install failed"; }
+uv --version || fail "uv install failed"
 
 # ---------------------------------------------------------------------------
-mark "Phase 1: clone + build Proteina-Complexa (uv env, weights)"
-if [ ! -d "$COMPLEXA_REPO" ]; then
-    git clone --depth 1 "$COMPLEXA_GIT" "$COMPLEXA_REPO"
-fi
+mark "Phase 1: clone + build Proteina-Complexa (uv env, weights) on $WORK"
+[ -d "$COMPLEXA_REPO/.git" ] || git clone --depth 1 "$COMPLEXA_GIT" "$COMPLEXA_REPO"
 cd "$COMPLEXA_REPO"
-if [ ! -d "$COMPLEXA_REPO/.venv" ]; then
-    ./env/build_uv_env.sh          # FULL build (JAX/colabdesign needed for generation)
-fi
+[ -d "$COMPLEXA_REPO/.venv" ] || ./env/build_uv_env.sh   # FULL build (JAX/colabdesign for generation)
 # shellcheck disable=SC1091
 source "$COMPLEXA_REPO/.venv/bin/activate"
-complexa init uv || true            # emits env.sh (needed for the CLI: target list, generate)
+complexa init uv 2>&1 | tail -6 || true            # emits env.sh (needed by the CLI: target list, generate)
+if [ ! -s "$COMPLEXA_REPO/env.sh" ]; then
+    fail "complexa init did not create env.sh (most likely out of disk on $WORK — see above)."
+fi
 # shellcheck disable=SC1091
 source "$COMPLEXA_REPO/env.sh" 2>/dev/null || true
-if [ ! -f "$COMPLEXA_REPO/ckpts/complexa.ckpt" ]; then
-    complexa download --complexa-all   # public NGC weights (no key)
-fi
+[ -f "$COMPLEXA_REPO/ckpts/complexa.ckpt" ] || complexa download --complexa-all || fail "complexa download failed"
 
 # ---------------------------------------------------------------------------
-mark "Phase 2: skill scripts (agent-toolkit) + ipSAE + python deps"
-if [ ! -d "$SKILL_ROOT" ]; then
-    git clone --depth 1 "$AGENT_TOOLKIT_REPO" "$SKILL_ROOT"
-fi
-# skill Stage-1/validation deps + notebook viz, into the Complexa venv
+mark "Phase 2: skill scripts (agent-toolkit) + ipSAE + python deps + Jupyter kernel"
+[ -d "$SKILL_ROOT/.git" ] || git clone --depth 1 "$AGENT_TOOLKIT_REPO" "$SKILL_ROOT"
 uv pip install numpy gemmi pyyaml pandas matplotlib requests \
     jupyterlab ipywidgets ipymolstar py3Dmol 2>&1 | tail -2 || \
     pip install numpy gemmi pyyaml pandas matplotlib requests jupyterlab ipywidgets ipymolstar py3Dmol 2>&1 | tail -2
 ( cd "$SKILL" && bash scripts/fetch_ipsae.sh ) || echo "ipSAE fetch failed (non-fatal)"
 
-# Register the Complexa venv as a selectable Jupyter kernel so it works in Brev's JupyterLab
+# Register the Complexa venv as a selectable Jupyter kernel (with env) so it works in Brev's JupyterLab
 # (the default 'Python 3' kernel is a *different* env and fails with 'No module named numpy').
 python -m ipykernel install --user --name complexa --display-name "Python (Complexa)" 2>/dev/null || true
 KJ="$HOME/.local/share/jupyter/kernels/complexa/kernel.json"
 if [ -f "$KJ" ]; then
-    python - "$KJ" "$COMPLEXA_REPO" "$SKILL" <<'PYK'
+    python - "$KJ" "$COMPLEXA_REPO" "$SKILL" "$AF2_DIR" <<'PYK'
 import json, os, sys
-kj, repo, skill = sys.argv[1:4]
+kj, repo, skill, af2 = sys.argv[1:5]
 d = json.load(open(kj))
 d["env"] = {
     "COMPLEXA_REPO": repo,
     "COMPLEXA_SKILL": skill,
-    "AF2_DIR": skill + "/community_models/ckpts/AF2",
+    "AF2_DIR": af2,
     "BOLTZ2_URL": "http://localhost:8000/biology/mit/boltz2/predict",
     "XLA_PYTHON_CLIENT_PREALLOCATE": "false",
     "XLA_PYTHON_CLIENT_MEM_FRACTION": "0.7",
@@ -91,28 +112,26 @@ fi
 
 # ---------------------------------------------------------------------------
 mark "Phase 3: AF2-Multimer params (public; for reward-guided best-of-n)"
-# setup_af2_params.sh writes params under the skill dir (its CWD).
-AF2_DIR="$SKILL/community_models/ckpts/AF2"
 if [ ! -d "$AF2_DIR/params" ]; then
     ( cd "$SKILL" && bash scripts/setup_af2_params.sh ) || echo "AF2 params setup failed (bypass still works)"
 fi
 
 # ---------------------------------------------------------------------------
-mark "Phase 4: local Boltz-2 NIM (:8000)"
+mark "Phase 4: local Boltz-2 NIM (:8000), cache on $NIMCACHE"
 if [ -n "${NGC_API_KEY:-}" ]; then
     printf '%s' "$NGC_API_KEY" | sudo docker login nvcr.io -u '$oauthtoken' --password-stdin >/dev/null 2>&1 \
-        && echo "nvcr login ok" || echo "nvcr login failed"
-    mkdir -p "$HOME/nimcache_boltz2"; chmod 777 "$HOME/nimcache_boltz2"
+        && echo "nvcr login ok" || fail "nvcr login failed (check NGC_API_KEY)"
+    mkdir -p "$NIMCACHE"; chmod 777 "$NIMCACHE"
     if ! sudo docker ps --format '{{.Names}}' | grep -q '^boltz2$'; then
         sudo docker rm -f boltz2 >/dev/null 2>&1 || true
         sudo docker run -d --name boltz2 --gpus all --shm-size=8g \
-            -e NGC_API_KEY="$NGC_API_KEY" -v "$HOME/nimcache_boltz2:/opt/nim/.cache" \
-            -p 8000:8000 "$BOLTZ2_IMAGE"
+            -e NGC_API_KEY="$NGC_API_KEY" -v "$NIMCACHE:/opt/nim/.cache" \
+            -p 8000:8000 "$BOLTZ2_IMAGE" || fail "failed to start Boltz-2 NIM"
         echo "Boltz-2 NIM starting (first run downloads weights + builds engines)."
     fi
 else
-    echo "NGC_API_KEY not set -> skipping local Boltz-2 NIM. Use hosted Boltz-2"
-    echo "(export NVIDIA_API_KEY and set --endpoint hosted) or re-run with NGC_API_KEY."
+    echo "NGC_API_KEY not set -> skipping local Boltz-2 NIM. Set it and re-run this script."
+    fail "NGC_API_KEY missing"
 fi
 
 # ---------------------------------------------------------------------------
@@ -138,20 +157,28 @@ mark "Phase 6: serve widget-capable JupyterLab from the Complexa venv on :8888"
 # Brev's stock jupyter.service lacks the anywidget/ipywidgets front-end extensions, so the embedded
 # Mol* views won't render there. Replace it, on the port Brev exposes, with the Complexa venv's
 # JupyterLab (which has the extensions). Mirrors Brev's no-token/remote-access config.
-NB="$(find "$HOME" -maxdepth 4 -name 'Complexa_Binder_Design.ipynb' 2>/dev/null | head -1)"
-[ -n "$NB" ] && cp -f "$NB" "$HOME/Complexa_Binder_Design.ipynb" 2>/dev/null || true
+# Serve from the launchable folder so users land right on the notebook (not the home dir).
+NBDIR="$SCRIPT_DIR"
+if [ ! -f "$NBDIR/Complexa_Binder_Design.ipynb" ]; then
+    FOUND="$(find "$HOME" "$WORK" -maxdepth 7 -name 'Complexa_Binder_Design.ipynb' 2>/dev/null | head -1)"
+    [ -n "$FOUND" ] && NBDIR="$(dirname "$FOUND")"
+fi
+echo "JupyterLab root dir: $NBDIR"
 sudo systemctl stop jupyter.service 2>/dev/null || true
 fuser -k 8888/tcp 2>/dev/null || true
 sleep 2
-( cd "$HOME" && setsid nohup jupyter lab --ip 0.0.0.0 --port 8888 --no-browser \
+( cd "$NBDIR" && setsid nohup jupyter lab --ip 0.0.0.0 --port 8888 --no-browser \
     --ServerApp.token= --ServerApp.password= --ServerApp.allow_remote_access=True \
-    --ServerApp.notebook_dir="$HOME" </dev/null >"$HOME/jupyter.log" 2>&1 & ) || true
+    --ServerApp.root_dir="$NBDIR" --ServerApp.default_url="/lab/tree/Complexa_Binder_Design.ipynb" \
+    </dev/null >"$HOME/jupyter.log" 2>&1 & ) || true
 sleep 6
-if ss -ltn 2>/dev/null | grep -q ':8888'; then
-    echo "Complexa JupyterLab serving on :8888 (open it via Brev; hard-refresh the browser)."
-else
-    echo "WARN: JupyterLab not on :8888 yet; start it manually (see README 'Seeing the 3D Mol* widgets')."
-fi
+ss -ltn 2>/dev/null | grep -q ':8888' && echo "Complexa JupyterLab serving on :8888 (open via Brev; hard-refresh)." \
+    || echo "WARN: JupyterLab not on :8888 yet; start it manually (see README)."
 
-mark "SETUP COMPLETE"
-echo "COMPLEXA_SETUP_DONE"
+# ---------------------------------------------------------------------------
+if [ "$SETUP_FAIL" = "1" ]; then
+    mark "SETUP FINISHED WITH ERRORS — see the '!!!' lines above (common cause: disk full → set PBD_WORK)"
+else
+    mark "SETUP COMPLETE"
+fi
+echo "COMPLEXA_SETUP_DONE (fail=$SETUP_FAIL)"
