@@ -122,9 +122,34 @@ PYK
 fi
 
 # ---------------------------------------------------------------------------
-mark "Phase 3: AF2-Multimer params (public; for reward-guided best-of-n)"
-if [ ! -d "$AF2_DIR/params" ]; then
-    ( cd "$SKILL" && bash scripts/setup_af2_params.sh ) || echo "AF2 params setup failed (bypass still works)"
+mark "Phase 3: AF2-Multimer params (~5 GB public; only for reward-guided best-of-n + AF2)"
+AF2_TAR_URL="${AF2_TAR_URL:-https://storage.googleapis.com/alphafold/alphafold_params_2022-12-06.tar}"
+if [ "${PBD_SETUP_AF2:-1}" = "0" ]; then
+    echo "PBD_SETUP_AF2=0 -> skipping AF2 params (add later with scripts/setup_af2_params.sh)."
+elif ls "$AF2_DIR"/params/params_model_1_multimer_v3.npz >/dev/null 2>&1; then
+    echo "AF2 params already present at $AF2_DIR/params"
+else
+    mkdir -p "$AF2_DIR"
+    # Resumable (-c), retried ~5 GB download straight into the notebook's AF2_DIR. (The skill
+    # script's default landed under COMPLEXA_REPO, mismatching AF2_DIR -> "params present: False";
+    # and its single wget under `set -e` aborts on any transient drop.)
+    if ! ls "$AF2_DIR"/params_model_*_multimer_v3.npz >/dev/null 2>&1; then
+        for a in 1 2 3; do
+            echo "AF2 params download attempt $a (~5 GB, resumable) ..."
+            wget -c -q --tries=3 --timeout=60 -O "$AF2_DIR/af2.tar" "$AF2_TAR_URL" && break
+            echo "  attempt $a failed; retrying in 10s"; sleep 10
+        done
+        tar -xf "$AF2_DIR/af2.tar" -C "$AF2_DIR" 2>/dev/null && rm -f "$AF2_DIR/af2.tar" \
+            || echo "AF2 tar extract failed (partial download?)"
+    fi
+    # Build the params/ symlink layout colabdesign expects (+ verify), pinned to AF2_DIR.
+    ( cd "$SKILL" && bash scripts/setup_af2_params.sh "$AF2_DIR" ) >/dev/null 2>&1 || true
+    if ls "$AF2_DIR"/params/params_model_1_multimer_v3.npz >/dev/null 2>&1; then
+        echo "AF2 params ready at $AF2_DIR/params"
+    else
+        echo "AF2 params NOT installed (optional — the default single-pass workflow does not need them)."
+        echo "  Add later:  source ~/.complexa_env && bash '$SKILL/scripts/setup_af2_params.sh' \"\$AF2_DIR\""
+    fi
 fi
 
 # ---------------------------------------------------------------------------
