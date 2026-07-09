@@ -102,10 +102,10 @@ so for a more reliably gate-passing top binder, raise the pool (`PBD_NUM_SAMPLES
 `PBD_N_ASSESS`) and the per-design diffusion samples (`PBD_DIFFUSION_SAMPLES=5`, best kept), or set
 `OPENHACKATHON_DEMO_MODE=0` (64 / 48 / 5).
 
-**Strict gate (reported as context):** ipSAE ≥ 0.45, ipTM ≥ 0.65, complex & binder & apo-binder
-pLDDT ≥ 0.70, apo↔holo binder RMSD ≤ 2.5 Å, ≥ 20% of hotspots contacted. Clearing it on a hard target
-like the RBD generally needs scale — so the notebook's primary output is the **ranked top-K** by
-co-folding confidence.
+**Co-folding gate (ipSAE-excluded):** ipTM ≥ 0.65, complex & binder pLDDT ≥ 0.70, ≥ 20% hotspot
+contact (plus apo-binder pLDDT ≥ 0.70 and apo↔holo RMSD ≤ 2.5 Å when `PBD_APO=1`). **ipSAE is
+excluded** because it's unavailable on Boltz-2's PAE and reads 0. The notebook ranks by ipTM and
+reports the **top-K**; clearing every bar on a hard target like the RBD generally needs scale.
 
 **Seeing the 3D Mol\* widgets.** The embedded Mol\* views need the JupyterLab **front-end** to have
 the `anywidget` / `ipywidgets` extensions. `setup.sh` serves a widget-capable JupyterLab on `:8888`;
