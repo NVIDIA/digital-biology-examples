@@ -78,15 +78,19 @@ configuration from environment variables (with sensible defaults):
 
 | Env var | Default (DEMO) | Meaning |
 |---------|----------------|---------|
-| `OPENHACKATHON_DEMO_MODE` | `1` | `1` = 24 generated / 16 co-folded / 3 diffusion; `0` = 64 / 48 / 5 |
+| `OPENHACKATHON_DEMO_MODE` | `1` | `1` = 48/24/5/75 (pool/assess/diffusion/steps); `0` = 96/64/8/100 |
 | `PBD_TARGET` | `30_SC2RBD` | any registered Complexa target |
 | `PBD_ALGORITHM` | `single-pass` | broad sampling; or `best-of-n` / `beam` for reward-guided search |
 | `PBD_AF2_REWARD` | `0` | `1` turns on the AF2-Multimer reward (only with `best-of-n`; slower) |
-| `PBD_NUM_SAMPLES` | `24` | size of the generated pool |
-| `PBD_N_ASSESS` | `16` | how many to co-fold + score with Boltz-2 |
-| `PBD_DIFFUSION_SAMPLES` | `3` | Boltz-2 structures sampled per design; the best-ipTM one is kept |
+| `PBD_NUM_SAMPLES` | `48` | size of the generated pool |
+| `PBD_N_ASSESS` | `24` | how many to co-fold + score with Boltz-2 |
+| `PBD_DIFFUSION_SAMPLES` | `5` | Boltz-2 structures sampled per design; the best-ipTM one is kept |
+| `PBD_SAMPLING_STEPS` | `75` | Boltz-2 refinement steps per prediction |
 | `PBD_APO` | `0` | `1` adds the apo (binder-alone) refold → apo↔holo stability RMSD |
 | `PBD_TOP_K` | `5` | how many top-ranked binders to surface |
+
+> Co-fold cost scales with `N_ASSESS × DIFFUSION_SAMPLES × SAMPLING_STEPS` — dial down for speed, up
+> for quality (demo config runs ~20–40 min; longer on smaller GPUs like L40S).
 
 **Strategy — generate broad, rank by Boltz-2.** The default generates a large pool fast (no AF2) and
 ranks it by **Boltz-2 co-folding ipTM**, surfacing the **top-K**. Boltz-2's co-folding is stochastic,
