@@ -22,6 +22,16 @@ REPO_DIR="${PBD_REPO_DIR:-$HOME/digital-biology-examples}"
 SUBDIR="examples/resources/bionemo-protein-binder-design-launchable"
 export PATH="$HOME/.local/bin:$PATH"
 
+# --- NGC_API_KEY (required for the local Boltz-2 NIM) ---------------------------------------------
+# Brev Launchables have no separate "secret" field — provide the key HERE, in this pasted script.
+#   Option A (embed, so attendees need no key): uncomment the line below and paste an event key.
+#     The key is readable on each VM while valid, so use a SHORT-LIVED, SCOPED key and revoke it
+#     right after the event.
+# export NGC_API_KEY='nvapi-...'
+#   Option B (bring-your-own-key): leave it commented; each user exports NGC_API_KEY in the Brev
+#     terminal and re-runs this script, or enters it in the notebook's first cell.
+# -------------------------------------------------------------------------------------------------
+
 echo "=== [brev_startup] $(date +%H:%M:%S) clone $REPO_URL ($REPO_BRANCH) ==="
 if [ ! -d "$REPO_DIR/.git" ]; then
     url="$REPO_URL"

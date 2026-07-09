@@ -48,22 +48,27 @@ You need an **A100 80 GB** and an **`NGC_API_KEY`** (`nvapi-…`) for the local 
 (Proteina-Complexa + AF2 weights are public). The Brev **Console wizard** is the way to create a
 shareable Launchable (the CLI manages instances, not Launchables).
 
-1. **Code:** *"I have code files in a git repository"* → this repo's URL.
-2. **Runtime:** **VM Mode** (required — the local Boltz-2 NIM needs Docker + `sudo`; VM Mode ships
-   Ubuntu 22.04 + Docker + CUDA).
-3. **Startup script:** paste **`brev_startup.sh`** (it clones the repo and runs `setup.sh`).
-4. **Environment / secrets:** set `NGC_API_KEY` (`nvapi-…`).
-5. **Jupyter / networking:** choose **No** to Brev's built-in Jupyter, then add a **secure link named
+1. **Files and runtime:** *"I have code files in a git repository"* → this repo's URL; select
+   **VM Mode** (required — the local Boltz-2 NIM needs Docker + `sudo`; VM Mode ships Ubuntu 22.04 +
+   Docker + CUDA).
+2. **Setup script:** paste **`brev_startup.sh`** (it clones the repo and runs `setup.sh`). The Brev
+   wizard has **no separate secret field** — provide `NGC_API_KEY` *inside this script*:
+   - **Embed (attendees need no key):** uncomment the `export NGC_API_KEY='nvapi-...'` line at the top
+     of the pasted script and paste a **short-lived, scoped** event key.
+   - **Bring-your-own-key:** leave it commented; each user exports `NGC_API_KEY` in the Brev terminal
+     (then re-runs the script) or enters it in the notebook's first cell.
+3. **Jupyter / networking:** choose **No** to Brev's built-in Jupyter, then add a **secure link named
    `jupyter` on port `8888`** — `setup.sh` serves the widget-capable JupyterLab there (Brev's stock
    Jupyter can't render the Mol\* widgets). Optionally expose `8000` to reach Boltz-2 directly.
-6. **Hardware:** 1× **A100 80 GB**, **~1 TB disk**. **Create Launchable** → shareable link + badge.
+4. **Compute:** 1× **A100 80 GB**, **~1 TB disk**.
+5. **Review:** name it, set access (link / org / community), **Create Launchable** → shareable link + badge.
 
 See the [Brev Launchables docs](https://docs.nvidia.com/brev/concepts/launchables).
 
-> **Event key tip.** To let attendees deploy without their own key, set `NGC_API_KEY` to a
-> **short-lived, scoped** NGC key (TTL as low as 1 hour; scope to NGC Catalog / NIM). It's still
-> readable on each VM while valid, so **deactivate/delete it right after the event**. Expect a
-> first-boot image+weights pull per instance — stagger starts to avoid NGC pull-rate throttling.
+> **Event key tip.** An embedded key is readable on each VM while valid, so use a **short-lived,
+> scoped** NGC key (TTL as low as 1 hour; scope to NGC Catalog / NIM) and **deactivate/delete it
+> right after the event**. Expect a first-boot image+weights pull per instance — stagger starts to
+> avoid NGC pull-rate throttling.
 
 ## Run the notebook
 
