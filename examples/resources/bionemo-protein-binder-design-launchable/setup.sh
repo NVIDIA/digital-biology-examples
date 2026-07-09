@@ -51,6 +51,11 @@ NIMCACHE="$WORK/nimcache_boltz2"
 AF2_DIR="$SKILL/community_models/ckpts/AF2"
 FREE_GB=$(( $(df -Pk "$WORK" 2>/dev/null | awk 'NR==2{print $4}') / 1024 / 1024 ))
 
+# Keep build/download caches + temp off the (often tiny) root disk too.
+export UV_CACHE_DIR="$WORK/.uv-cache" PIP_CACHE_DIR="$WORK/.pip-cache" \
+       XDG_CACHE_HOME="$WORK/.cache" HF_HOME="$WORK/.hf" TMPDIR="$WORK/.tmp"
+mkdir -p "$UV_CACHE_DIR" "$PIP_CACHE_DIR" "$XDG_CACHE_HOME" "$HF_HOME" "$TMPDIR" 2>/dev/null || true
+
 # ---------------------------------------------------------------------------
 mark "Phase 0: base packages + uv  (work dir: $WORK — ${FREE_GB} GB free)"
 if [ "$FREE_GB" -lt "$MIN_FREE_GB" ]; then
@@ -70,9 +75,15 @@ cd "$COMPLEXA_REPO"
 [ -d "$COMPLEXA_REPO/.venv" ] || ./env/build_uv_env.sh   # FULL build (JAX/colabdesign for generation)
 # shellcheck disable=SC1091
 source "$COMPLEXA_REPO/.venv/bin/activate"
-complexa init uv 2>&1 | tail -6 || true            # emits env.sh (needed by the CLI: target list, generate)
+# emits env.sh (needed by the CLI: target list, generate). The first attempt right after the venv
+# build can fail transiently, so retry until env.sh appears.
+for _a in 1 2 3; do
+    complexa init uv 2>&1 | tail -6 || true
+    [ -s "$COMPLEXA_REPO/env.sh" ] && { echo "complexa init ok (attempt $_a)"; break; }
+    echo "complexa init (attempt $_a) produced no env.sh; retrying in 8s..."; sleep 8
+done
 if [ ! -s "$COMPLEXA_REPO/env.sh" ]; then
-    fail "complexa init did not create env.sh (most likely out of disk on $WORK — see above)."
+    fail "complexa init did not create env.sh after retries (see output above; check disk on $WORK)."
 fi
 # shellcheck disable=SC1091
 source "$COMPLEXA_REPO/env.sh" 2>/dev/null || true
