@@ -11,7 +11,7 @@ limitations under the License.
 # De Novo Protein Binder Design — Brev Launchable (Proteina-Complexa + Boltz-2)
 
 A self-contained **Brev Launchable** that runs an end-to-end de novo **protein binder design**
-campaign on a single **A100 80 GB** in **well under an hour**:
+campaign on a single **A100 / H100 / L40S** GPU in **well under an hour**:
 
 - **Generation — [NVIDIA Proteina-Complexa](https://github.com/NVIDIA-Digital-Bio/Proteina-Complexa):**
   co-designs the binder **sequence + full-atom structure together**. The default generates a broad
@@ -44,7 +44,7 @@ PD-L1, IL-17A, TNFα, VEGFA, HER2, …).
 
 ## Deploy on Brev (Console wizard)
 
-You need an **A100 80 GB** and an **`NGC_API_KEY`** (`nvapi-…`) for the local Boltz-2 NIM
+You need an **A100 / H100 (80 GB) or L40S (48 GB)** GPU and an **`NGC_API_KEY`** (`nvapi-…`) for the local Boltz-2 NIM
 (Proteina-Complexa + AF2 weights are public). The Brev **Console wizard** is the way to create a
 shareable Launchable (the CLI manages instances, not Launchables).
 
@@ -60,7 +60,7 @@ shareable Launchable (the CLI manages instances, not Launchables).
 3. **Jupyter / networking:** choose **No** to Brev's built-in Jupyter, then add a **secure link named
    `jupyter` on port `8888`** — `setup.sh` serves the widget-capable JupyterLab there (Brev's stock
    Jupyter can't render the Mol\* widgets). Optionally expose `8000` to reach Boltz-2 directly.
-4. **Compute:** 1× **A100 80 GB**, **~1 TB disk**.
+4. **Compute:** 1× **A100 / H100 (80 GB) or L40S (48 GB)**, **~1 TB disk**.
 5. **Review:** name it, set access (link / org / community), **Create Launchable** → shareable link + badge.
 
 See the [Brev Launchables docs](https://docs.nvidia.com/brev/concepts/launchables).
@@ -91,6 +91,10 @@ configuration from environment variables (with sensible defaults):
 
 > Co-fold cost scales with `N_ASSESS × DIFFUSION_SAMPLES × SAMPLING_STEPS` — dial down for speed, up
 > for quality (demo config runs ~20–40 min; longer on smaller GPUs like L40S).
+>
+> **L40S (48 GB) note:** vs A100/H100 (80 GB), very large co-folding jobs — big complexes, high
+> `PBD_DIFFUSION_SAMPLES`, or the AF2-reward path — may hit **CUDA OOM**; reduce `PBD_N_ASSESS` /
+> `PBD_DIFFUSION_SAMPLES` (or binder/target size) if so.
 
 **Strategy — generate broad, rank by Boltz-2.** The default generates a large pool fast (no AF2) and
 ranks it by **Boltz-2 co-folding ipTM**, surfacing the **top-K**. Boltz-2's co-folding is stochastic,
