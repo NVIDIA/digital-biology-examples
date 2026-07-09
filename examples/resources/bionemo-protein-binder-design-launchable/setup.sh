@@ -140,6 +140,23 @@ if [ -n "${NGC_API_KEY:-}" ]; then
             -p 8000:8000 "$BOLTZ2_IMAGE" || fail "failed to start Boltz-2 NIM"
         echo "Boltz-2 NIM starting (first run downloads weights + builds engines)."
     fi
+    # Background self-heal: the model download can fail transiently ("error decoding response
+    # body") and exit the container. Poll health for ~30 min and restart the container if it is
+    # not running yet -- the same manual restart that reliably recovers it. Detached so it
+    # survives this script exiting.
+    setsid bash -c '
+      tries=0
+      for _w in $(seq 1 60); do
+        sleep 30
+        code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:8000/v1/health/ready 2>/dev/null)
+        [ "$code" = "200" ] && { echo "[watchdog $(date +%H:%M:%S)] Boltz-2 healthy"; break; }
+        st=$(sudo docker inspect -f "{{.State.Status}}" boltz2 2>/dev/null || echo missing)
+        if [ "$st" != "running" ] && [ "$tries" -lt 4 ]; then
+          tries=$((tries+1)); echo "[watchdog $(date +%H:%M:%S)] Boltz-2 $st -> restart #$tries"
+          sudo docker start boltz2 >/dev/null 2>&1 || sudo docker restart boltz2 >/dev/null 2>&1 || true
+        fi
+      done ' >> "$LOG" 2>&1 &
+    echo "Boltz-2 health watchdog started (self-heals transient download failures)."
 else
     echo "NGC_API_KEY not set -> skipping local Boltz-2 NIM. Set it and re-run this script."
     fail "NGC_API_KEY missing"
