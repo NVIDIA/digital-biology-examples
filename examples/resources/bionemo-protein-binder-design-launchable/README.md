@@ -33,14 +33,15 @@ Everything else is fetched at deploy time by `setup.sh` (Proteina-Complexa + wei
 [bionemo-agent-toolkit](https://github.com/NVIDIA-BioNeMo/bionemo-agent-toolkit) skill, ipSAE,
 AF2-Multimer params, the Boltz-2 NIM image, and Python deps).
 
-## Target: SARS-CoV-2 spike RBD
+## Target: PD-L1 (cancer immunotherapy)
 
-Binders are designed against the **Receptor-Binding Domain** of the SARS-CoV-2 spike (registered
-Complexa target **`30_SC2RBD`**, PDB `6M0J`, span `E333-526`, hotspots `E485/E489/E494/E500/E505`,
-binder length 80–120 aa). The RBD engages human **ACE2** to enter cells, so a binder covering this
-interface blocks viral entry — the basis of neutralizing antibody and de novo-minibinder
-therapeutics. Swap `PBD_TARGET` for any of the ~44 registered targets (`complexa target list`:
-PD-L1, IL-17A, TNFα, VEGFA, HER2, …).
+Binders are designed against **PD-L1** (Programmed death-ligand 1 / CD274; registered Complexa target
+**`32_PDL1_ALPHA`**, PDB `5O45`, span `A17-132`, hotspots `A56/A115/A123`, binder length 50–120 aa).
+Tumors display PD-L1, which engages **PD-1** on T cells to switch them off (an immune *checkpoint*); a
+binder covering PD-L1's PD-1-binding face blocks that checkpoint and re-activates anti-tumor T cells —
+the mechanism of approved checkpoint inhibitors (atezolizumab, durvalumab, avelumab). PD-L1 is a
+well-behaved, highly *designable* target. Swap `PBD_TARGET` for any of the ~44 registered targets
+(`complexa target list`: IL-7Rα, TrkA, VEGF-A, TNFα, HER2, or the SARS-CoV-2 RBD `30_SC2RBD`, …).
 
 ## Deploy on Brev (Console wizard)
 
@@ -79,7 +80,7 @@ configuration from environment variables (with sensible defaults):
 | Env var | Default (DEMO) | Meaning |
 |---------|----------------|---------|
 | `OPENHACKATHON_DEMO_MODE` | `1` | `1` = 48/24/5/75 (pool/assess/diffusion/steps); `0` = 96/64/8/100 |
-| `PBD_TARGET` | `30_SC2RBD` | any registered Complexa target |
+| `PBD_TARGET` | `32_PDL1_ALPHA` | any registered Complexa target (PD-L1 default) |
 | `PBD_ALGORITHM` | `single-pass` | broad sampling; or `best-of-n` / `beam` for reward-guided search |
 | `PBD_AF2_REWARD` | `0` | `1` turns on the AF2-Multimer reward (only with `best-of-n`; slower) |
 | `PBD_NUM_SAMPLES` | `48` | size of the generated pool |
@@ -105,7 +106,8 @@ so for a more reliably gate-passing top binder, raise the pool (`PBD_NUM_SAMPLES
 **Co-folding gate (ipSAE-excluded):** ipTM ≥ 0.65, complex & binder pLDDT ≥ 0.70, ≥ 20% hotspot
 contact (plus apo-binder pLDDT ≥ 0.70 and apo↔holo RMSD ≤ 2.5 Å when `PBD_APO=1`). **ipSAE is
 excluded** because it's unavailable on Boltz-2's PAE and reads 0. The notebook ranks by ipTM and
-reports the **top-K**; clearing every bar on a hard target like the RBD generally needs scale.
+reports the **top-K**. PD-L1 is designable, so designs should clear the gate; on a harder target
+(e.g. the SARS-CoV-2 RBD) clearing every bar generally needs scale.
 
 **Seeing the 3D Mol\* widgets.** The embedded Mol\* views need the JupyterLab **front-end** to have
 the `anywidget` / `ipywidgets` extensions. `setup.sh` serves a widget-capable JupyterLab on `:8888`;
