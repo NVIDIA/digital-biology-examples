@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.2.post1] - 2026-02-24
+
+PEP 440 post-release patch on top of `0.5.2`. **No public API changes**;
+fixes a long-standing packaging defect that has been present since
+`0.5.0` (and was carried into `0.5.2` unchanged). Users on a clean
+environment should upgrade to `0.5.2.post1`; users who already have
+`pandas` installed will see no behavior difference.
+
+### Fixed — packaging
+- **`import boltz2_client` now works on a clean install.** Previously
+  `boltz2_client/virtual_screening.py` did `import pandas as pd` at
+  module top, but `pandas` is only declared in the `[dev]` extra (not a
+  runtime dependency), so any clean `pip install boltz2-python-client`
+  followed by `import boltz2_client` raised
+  `ModuleNotFoundError: No module named 'pandas'`. The pandas import is
+  now deferred into the four methods that actually need it
+  (`CompoundLibrary.from_csv`, `VirtualScreeningResult.to_dataframe`,
+  `VirtualScreeningResult.get_top_hits`,
+  `VirtualScreeningResult.get_statistics_by_group`); calling any of those
+  methods still requires pandas, but importing the package, the CLI,
+  and every other code path no longer does. Callers who use the virtual
+  screening DataFrame helpers should install with
+  `pip install "boltz2-python-client[dev]"` or add `pandas` to their
+  own environment.
+- A `from __future__ import annotations` was added to
+  `virtual_screening.py` so the `pd.DataFrame` return-type annotations
+  on those methods are evaluated lazily and do not require `pandas` at
+  import time. Static type checkers and IDEs continue to resolve the
+  annotations via a `TYPE_CHECKING` block.
+
 ## [0.5.2] - 2026-02-24
 
 ### Fixed — `MultiEndpointClient` reliability
