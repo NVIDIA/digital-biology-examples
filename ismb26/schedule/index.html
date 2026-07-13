@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ISMB 2026 Schedule</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0a0f1e; }
+    input:focus { outline: 1px solid #38bdf8; }
+    button { font-family: inherit; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0d1117; }
+    ::-webkit-scrollbar-thumb { background: #1e3a5f; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useMemo } = React;
+
+    // ─── TRACK METADATA ──────────────────────────────────────────────────────────
+    const TRACK_META = {
+      "3DSIG": { full: "3DSIG: Structural Bioinformatics & Computational Biophysics", desc: "Structure-based drug discovery, structure prediction, docking, protein dynamics, macromolecular assemblies, molecular visualization, structural genomics.", keywords: ["structure","protein","docking","drug discovery","biophysics"], url: "https://www.iscb.org/ismb2026/scientific-programme/cosi-tracks-other-abstracts/3dsig" },
+      "BioInfo-Core": { full: "BioInfo-Core", desc: "Community for bioinformatics core facility managers and staff. Topics: core management, workflow development, reproducibility, best practices, training.", keywords: ["core facility","management","workflow","reproducibility"], url: "http://bioinfo-core.org" },
+      "Bioinformatics in USA": { full: "Bioinformatics in the USA", desc: "One-day DC-special track showcasing breadth of US bioinformatics across health, biomedicine, biodiversity, and environmental/agricultural sciences. US-based researchers only.", keywords: ["USA","health","biomedicine","biodiversity","AI","infrastructure"], url: "https://www.iscb.org/ismb2026/scientific-programme/usa" },
+      "BioVis": { full: "BioVis: Biological Data Visualization", desc: "Visualization research for large, complex biological datasets. Bridges visualization, bioinformatics, and biology communities.", keywords: ["visualisation","visual analytics"], url: "http://biovis.net/" },
+      "BOKR": { full: "BOKR: Bio-Ontologies & Knowledge Representation", desc: "29th year at ISMB. Ontologies, knowledge graphs, knowledge-enhanced learning, FAIR data, knowledge extraction and dissemination. Shares sessions with BOSC (Jul 14) and Function (Jul 13).", keywords: ["ontologies","knowledge graphs","FAIR","linked data","neuro-symbolic"], url: "https://sites.google.com/site/bioontologies/2026-meeting" },
+      "BOSC": { full: "BOSC: Bioinformatics Open Source Conference", desc: "27th annual BOSC. Open science, open source bioinformatics, standards, ontologies, open data, reproducibility, workflows. Keynotes: Eric Green & Maryam Zaringhalam. Panels on Resilient Open Science and Open Source in the Age of AI. Joint session with BOKR on Jul 14.", keywords: ["open source","open science","open data","reproducible research","workflows"], url: "https://www.open-bio.org/events/bosc-2026/" },
+      "BOKR/BOSC": { full: "BOKR / BOSC Joint Session", desc: "Joint session: Bio-Ontologies & Knowledge Representation with the Bioinformatics Open Source Conference. Features BOSC keynote Eric Green.", keywords: ["ontologies","open source","knowledge representation"], url: "https://www.open-bio.org/events/bosc-2026/" },
+      "BOKR/Function": { full: "BOKR / Function Joint Session", desc: "Joint session: Bio-Ontologies & Knowledge Representation with Function COSI (Gene and Protein Function Annotation).", keywords: ["ontologies","function prediction","knowledge"], url: "https://sites.google.com/site/bioontologies/2026-meeting" },
+      "CAMDA": { full: "CAMDA: Critical Assessment of Massive Data Analysis", desc: "2026 Challenges: (1) Health Privacy Challenge — synthetic gene expression (bulk RNA-seq & scRNA-seq tracks). (2) Synthetic Clinical Health Records — diabetes trajectory prediction from 1.2M patient EHRs. (3) Anti-Microbial Resistance Prediction — predict resistance genes from WHO Priority Pathogen List clinical isolates. (4) Gut Microbiome Health Index.", keywords: ["data analysis","benchmarking","EHR","microbiome","AMR","synthetic data"], url: "http://camda.info/" },
+      "Career Symposium": { full: "Computational Biology Careers Symposium", desc: "Panel making grad students and postdocs aware of industry, government, and non-tenure track academia roles. Closed track.", closed: true, url: "https://www.iscb.org/ismb2026/scientific-programme/cbcs" },
+      "Career Fair": { full: "Career Fair", desc: "Annual career fair. Columbia Ballroom.", url: "https://www.iscb.org/ismb2026/whats-happening/career-fair" },
+      "CompMS": { full: "CompMS: Computational Mass Spectrometry", desc: "Proteomics, metabolomics, and lipidomics computational methods for mass spectrometry data.", keywords: ["mass spectrometry","proteomics","metabolomics","lipidomics"], url: "http://compms.org/" },
+      "CSI": { full: "CSI: Computational and Systems Immunology", desc: "ML, network, and immunogenomic approaches for immunology data. Topics: single-cell multi-omics, spatial genomics, trajectory inference, TCR/BCR repertoire profiling.", keywords: ["immunology","single-cell","spatial genomics","TCR","BCR"], url: "https://www.iscb.org/ismb2026/scientific-programme/cosi-tracks-other-abstracts/csi" },
+      "DREAM": { full: "DREAM Challenges: Benchmarking AI & Agents across biological domains", desc: "Crowd-sourcing complex biomedical research questions. 60+ challenges, 30,000+ participants. 2026 includes DREAMQ — inaugural quantum DREAM challenge.", keywords: ["benchmarking","crowd-sourcing","AI","agents"], url: "http://dreamchallenges.org/" },
+      "Education": { full: "Education: Computational Biology Education", desc: "Bioinformatics education and training: curricula, competencies, teaching tools, and training resources.", keywords: ["education","training","curricula"], url: "https://www.iscb.org/ismb2026/scientific-programme/cosi-tracks-other-abstracts/education" },
+      "Equity & Diversity": { full: "Equity and Diversity in Computational Biology Research", desc: "Research examining equity, representation, and diversity in datasets, methods, or the field of computational biology.", keywords: ["equity","diversity","representation"], url: "https://www.iscb.org/ismb2026/scientific-programme/equity" },
+      "EvolCompGen": { full: "EvolCompGen: Evolution & Comparative Genomics", desc: "Phylogenetics, multiple sequence alignment, comparative genomics, population genetics, cancer evolution, genome rearrangements.", keywords: ["evolution","phylogeny","phylogenomics","comparative genomics","population genomics"], url: "https://evolcompgen.org/" },
+      "Function": { full: "Function: Gene and Protein Function Annotation", desc: "Computational and experimental approaches to gene and protein function prediction, including the CAFA challenge.", keywords: ["protein function","machine learning","CAFA"], url: "https://www.biofunctionprediction.org/" },
+      "GenCompBio": { full: "GenCompBio: General Computational Biology", desc: "Novel techniques in emerging areas not covered by specialized COSIs.", keywords: ["general","emerging methods"], url: "https://www.iscb.org/ismb2026/scientific-programme/cosi-tracks-other-abstracts/gencompbio" },
+      "HiTSeq": { full: "HiTSeq: High-throughput Sequencing", desc: "Latest advances in computational HTS data analysis: genome assembly, haplotype phasing, transcriptomics, metagenomics, long reads, single-cell, pangenomes. Full schedule on hitseq.org.", keywords: ["sequencing","assembly","phasing","metagenomics","long reads","nanopore","pangenomes","single-cell"], url: "https://www.hitseq.org/" },
+      "ICBO": { full: "ICBO: International Conference on Biomedical Ontology", desc: "17th ICBO — Theme: 'Semantic Awareness in the Age of Generative AI'. Jul 15–17, co-located. Full agenda with keynote Richard Scheuermann (NIH/NLM) and 5 invited speakers. Includes VDOS Workshop (Jul 16) and Cell Type Knowledge Workshop (Jul 17).", keywords: ["biomedical ontology","AI","semantic technologies","knowledge graphs"], url: "https://icbo-conference.github.io/icbo2026/" },
+      "Industry Workshop": { full: "Industry Workshop", desc: "Three expert panels on AI/ML in pharma, biotech, and VC (AstraZeneca, Sanofi, 10X Genomics, Tempus AI, Google Ventures). Closed track.", closed: true, url: "https://www.iscb.org/ismb2026/scientific-programme/industry" },
+      "iRNA": { full: "iRNA: Integrative RNA Biology", desc: "Full range of RNA biology: splicing, polyadenylation, translation, non-coding RNA, RNA structure, modifications, long-read sequencing, RNA therapeutics. 4 keynote speakers.", keywords: ["transcriptomics","RNA processing","splicing","non-coding RNA","RNA structure","mRNA modifications"], url: "https://irna.iscb.org/" },
+      "MICROBIOME": { full: "MICROBIOME", desc: "Computational methods for microbiome research. Based on CAMI benchmarking. Covers metaomics, microbial networks, pathogens, diagnostics.", keywords: ["microbiome","metagenomics","metatranscriptomics","microbial ecology"], url: "https://www.microbiome-cosi.org/" },
+      "MLCSB": { full: "MLCSB: Machine Learning in Computational & Systems Biology", desc: "Machine learning meets systems biology. Deep learning, graph inference, semi-supervised learning applied to genomics, transcriptomics, proteomics, metabolomics.", keywords: ["machine learning","deep learning","AI","systems biology","omics"], url: "https://www.iscb.org/ismb2026/scientific-programme/cosi-tracks-other-abstracts/mlcsb" },
+      "NetBio": { full: "NetBio: Network Biology", desc: "Novel methods for modeling and analyzing biological data as networks. Disease networks, pathways, systems-level analysis.", keywords: ["networks","pathways","disease networks"], url: "http://cosi.iscb.org/wiki/NetBio:Home" },
+      "NIH/ODSS": { full: "NIH/ODSS", desc: "Full-day NIH Office of Data Science Strategy track on cloud and emerging tech: quantum computing, digital twins, AI, NIH cloud cyberinfrastructure. Closed track.", closed: true, url: "https://www.iscb.org/ismb2026/scientific-programme/nih" },
+      "NVIDIA Workshop": { full: "NVIDIA Workshop", desc: "GPU-accelerated computing and AI applications in computational biology. Closed track.", closed: true, url: "https://www.iscb.org/ismb2026/scientific-programme/nvidia" },
+      "Pathogen Data Network": { full: "Pathogen Data Network Forum", desc: "Open Community Forum for infectious disease data (FAIR sharing, tools, resources). Hosted by PDN, BV-BRC, and BRC Analytics/Galaxy. Closed track.", closed: true, url: "https://www.iscb.org/ismb2026/scientific-programme/pathogen" },
+      "Publishing Session": { full: "Publishing Session", desc: "Best practices for rigorous, transparent, reproducible ML method evaluation in life sciences. Covers benchmarking, uncertainty, and reporting standards. Closed track.", closed: true, url: "https://www.iscb.org/ismb2026/scientific-programme/publishing" },
+      "QLS": { full: "QLS: Quantum for Life Sciences", desc: "Quantum computing, hybrid quantum-classical, and quantum-inspired approaches for biology. Includes DREAMQ — inaugural quantum DREAM challenge. Closed track.", closed: true, keywords: ["quantum computing","multi-omics"], url: "https://www.iscb.org/ismb2026/scientific-programme/q4ls" },
+      "RegSys": { full: "RegSys: Regulatory & Systems Genomics", desc: "Regulatory genomics: transcription factors, enhancers, epigenetics, alternative splicing, regulatory networks, single-cell transcriptomics, 3D genomics (Hi-C).", keywords: ["regulatory genomics","epigenomics","ChIP-seq","ATAC-seq","single-cell","Hi-C"], url: "http://cosi.iscb.org/wiki/RegSIG:Home" },
+      "SCS": { full: "Student Council Symposium", desc: "Student-organized event: keynotes, oral presentations, poster session.", url: "https://iscbsc.org/scs2026/" },
+      "SysMod": { full: "SysMod: Computational Modeling of Biological Systems", desc: "Mathematical modeling and bioinformatics for biological systems. Constraint-based, logical, kinetic, and multi-scale models.", keywords: ["computational modeling","constraint-based models","kinetic models"], url: "https://sysmod.info/" },
+      "Tech Talks": { full: "Tech Track", desc: "Technology presentations on bioinformatics tools, platforms, and software.", url: "https://www.iscb.org/ismb2026/scientific-programme/techtrack" },
+      "Text Mining": { full: "Text Mining: Text Mining for Healthcare and Biology", desc: "Text mining tools and applications for biological/biomedical discovery. Bridges tool creators with researchers.", keywords: ["text mining","NLP","biomedical NLP"], url: "http://cosi.iscb.org/wiki/TextMining:Home" },
+      "TransMed": { full: "TransMed: Translational Medical Informatics", desc: "Clinical and translational medicine informatics: multi-omics + imaging + clinical data integration, precision medicine, biomarker discovery, personalized therapeutics.", keywords: ["translational medicine","omics","clinical data","precision medicine"], url: "https://transmed.github.io/" },
+      "Tutorials": { full: "Tutorials", desc: "In-person tutorials (additional registration fee). Half-day and full-day.", url: "https://www.iscb.org/ismb2026/whats-happening/tutorials" },
+      "VarI": { full: "VarI: Variant Interpretation", desc: "Genetic variant analysis and interpretation: functional/structural impact prediction, GWAS, SNV prioritization, population genomics.", keywords: ["variant interpretation","SNV","GWAS","population genomics"], url: "http://varicosi.biofold.org/" },
+      "WEB": { full: "WEB: Workshop on Education for Bioinformatics", desc: "Workshop on bioinformatics education practices. Closed track.", closed: true, url: "https://www.iscb.org/ismb2026/scientific-programme/web" },
+      "YBS": { full: "Youth Bioinformatics Symposium", desc: "Symposium engaging young scientists in bioinformatics and computational biology.", url: "https://www.iscb.org/ybs2026/whats-happening/abridged-agenda" },
+      "Keynote": { full: "Distinguished Keynote", desc: "Plenary keynote by distinguished scientists.", url: "https://www.iscb.org/ismb2026/whats-happening/distinguished-keynotes" },
+      "Break": { full: "Break", desc: "" }, "Lunch": { full: "Lunch Break", desc: "" }, "Social": { full: "Social / Networking", desc: "" },
+    };
+
+    // ─── SCHEDULE DATA ───────────────────────────────────────────────────────────
+    const DAYS = [
+      {
+        id: "sun", label: "Sunday", date: "July 12",
+        sessions: [
+          { time: "9:00–13:00", room: "IBC", track: "DREAM", title: "DREAM Challenge Sessions", type: "cosi", speakers: [] },
+          { time: "9:00–10:45", room: "Multiple Rooms", track: "Tutorials", title: "Morning Tutorials", type: "tutorial", speakers: [],
+            details: ["IP1: Agentic AI System for In Silico Team Science (LLM Basics to Lab Assistant Agents)","IP3: From Trees to Networks","IP5: Computational Network Analysis of Omics Data","IP7: Quantum Computing for Multi-omics analyses","IP8: Metagenomic sequence analysis using kmer-based methods","IP9: Learning models of molecular sequence recognition from NGS data (biophysical ML)"] },
+          { time: "9:00–13:00", room: "Cabinet", track: "SCS", title: "Student Council Symposium", type: "special", speakers: [] },
+          { time: "10:45–11:00", room: "All", track: "Break", title: "Coffee Break", type: "break", speakers: [] },
+          { time: "11:00–13:00", room: "Multiple Rooms", track: "Tutorials", title: "Morning Tutorials (continued)", type: "tutorial", speakers: [],
+            details: ["IP1: Agentic AI (continued)","IP3: From Trees to Networks (continued)","IP5: Network Analysis of Omics Data (continued)","IP7: Quantum Computing (continued)","IP8: Metagenomic analysis (continued)","IP9: Biophysical ML (continued)"] },
+          { time: "13:00–14:00", room: "All", track: "Lunch", title: "Lunch Break — On Your Own", type: "break", speakers: [] },
+          { time: "14:00–16:00", room: "Multiple Rooms", track: "Tutorials", title: "Afternoon Tutorials", type: "tutorial", speakers: [],
+            details: ["IP2: Large Language Models and Agentic AI for Biomedical Informatics","IP4: Generating realistic synthetic biological data using phylogenetics","IP6: Network Biology Workflows with Cytoscape and NDEx","IP7: Quantum Computing (continued)","IP8: Metagenomic analysis (continued)","IP9: Biophysical ML (continued)"] },
+          { time: "14:00–17:15", room: "Georgetown", track: "YBS", title: "Youth Bioinformatics Symposium", type: "special", speakers: [] },
+          { time: "16:00–18:00", room: "Columbia", track: "Career Fair", title: "Career Fair", type: "social", speakers: [] },
+          { time: "16:00–16:15", room: "All", track: "Break", title: "Coffee Break", type: "break", speakers: [] },
+          { time: "16:15–18:00", room: "Multiple Rooms", track: "Tutorials", title: "Afternoon Tutorials (continued)", type: "tutorial", speakers: [],
+            details: ["IP2: LLMs and Agentic AI (continued)","IP4: Synthetic biological data (continued)","IP6: Cytoscape and NDEx (continued)","IP7: Quantum Computing (continued)","IP8: Metagenomic analysis (continued)","IP9: Biophysical ML (continued)"] },
+          { time: "18:00–18:30", room: "All", track: "Break", title: "Pre-Conference Break", type: "break", speakers: [] },
+          { time: "18:30–19:30", room: "International Ballroom Center (IBC)", track: "Keynote", title: "Conference Welcome & Distinguished Keynote", type: "keynote",
+            speakers: [{ name: "Richard Durbin", affiliation: "University of Cambridge, UK", talk: "More applications of the Burrows-Wheeler transform in computational genomics", award: "ISCB 2026 Senior Scientist Award" }] },
+          { time: "19:30–21:00", room: "Columbia", track: "Social", title: "Welcome Networking Reception", type: "social", speakers: [] },
+        ]
+      },
+      {
+        id: "mon", label: "Monday", date: "July 13",
+        sessions: [
+          { time: "8:40–10:00", room: "International Ballroom Center (IBC)", track: "Keynote", title: "Morning Welcome & Distinguished Keynote", type: "keynote",
+            speakers: [{ name: "Olga Troyanskaya", affiliation: "Princeton University, USA", talk: "Toward Predictive Models of Human Biology and Disease", award: "ISCB 2026 Innovator Award" }] },
+          { time: "10:00–11:00", room: "Columbia", track: "Break", title: "Caffeinate and Connect with Posters & Exhibitors", type: "break", speakers: [] },
+          { time: "11:00–11:05", room: "Int'l Ballroom Center", track: "HiTSeq", title: "HiTSeq Welcome", type: "cosi", speakers: [] },
+          { time: "11:05–12:00", room: "Int'l Ballroom Center", track: "HiTSeq", title: "Keynote: From Reads to Retrieval — Petabase-Scale Sequence Search with MetaGraph", type: "cosi",
+            speakers: [{ name: "Andre Kahles", affiliation: "ETH Zürich, Switzerland", role: "Keynote" }] },
+          { time: "12:00–12:20", room: "Int'l Ballroom Center", track: "HiTSeq", title: "Scalable computation of ultrabubbles in pangenomes by orienting bidirected graphs", type: "cosi",
+            speakers: [{ name: "Corentin Moumard", affiliation: "et al.", role: "Proceedings" }] },
+          { time: "12:20–12:40", room: "Int'l Ballroom Center", track: "HiTSeq", title: "RLBWT-Based LCP Computation in Compressed Space for Terabase-Scale Pangenome Analysis", type: "cosi",
+            speakers: [{ name: "Ahsan Sanaullah", affiliation: "et al.", role: "Proceedings" }] },
+          { time: "12:40–13:00", room: "Int'l Ballroom Center", track: "HiTSeq", title: "ImpuT2T: Pangenome-Based Patching for Human Genome Assemblies", type: "cosi",
+            speakers: [{ name: "Mao-Jan Lin", affiliation: "et al." }] },
+          { time: "11:00–12:00", room: "Int'l Ballroom East (IBE)", track: "iRNA", title: "iRNA Keynote: Decoding the Cancer Splicing Landscape", type: "cosi", highlight: true,
+            speakers: [{ name: "Olga Anczuków", affiliation: "The Jackson Laboratory for Genomic Medicine", talk: "Decoding the Cancer Splicing Landscape: From Aging-Associated Isoforms to Regulatory Networks and Therapeutic Targets", role: "Keynote" }] },
+          { time: "12:00–13:00", room: "Int'l Ballroom East (IBE)", track: "iRNA", title: "iRNA Keynote: Predictive Modeling of Translation", type: "cosi", highlight: true,
+            speakers: [{ name: "Can Cenik", affiliation: "University of Texas at Austin", talk: "An Integrative Approach to Predictive Modeling of Translation (RiboNN deep neural network)", role: "Keynote" }] },
+          { time: "11:00–13:00", room: "Room 9-10 Combo", track: "RegSys", title: "RegSys — Morning Session", type: "cosi", speakers: [] },
+          { time: "11:00–13:00", room: "Cabinet", track: "CompMS", title: "CompMS — Morning Session", type: "cosi", speakers: [] },
+          { time: "11:00–13:00", room: "Georgetown", track: "NIH/ODSS", title: "NIH/ODSS — Morning", type: "special", speakers: [] },
+          { time: "11:00–13:00", room: "Jefferson West", track: "MICROBIOME", title: "MICROBIOME — Morning Session", type: "cosi", speakers: [] },
+          { time: "11:00–13:00", room: "Jefferson East", track: "Text Mining", title: "Text Mining — Morning Session", type: "cosi", speakers: [] },
+          { time: "11:00–13:00", room: "Lincoln West", track: "CSI", title: "CSI — Morning Session", type: "cosi", speakers: [] },
+          { time: "11:00–13:00", room: "Lincoln East", track: "BOKR", title: "BOKR — Morning Session (Day 1 of 2)", type: "cosi", highlight: true,
+            speakers: [{ name: "Keynote Speaker TBD", affiliation: "BOKR 2026 Keynote — announced at conference", role: "Keynote" }],
+            details: ["Topics: ontologies, knowledge graphs, knowledge-enhanced learning, FAIR data, neuro-symbolic methods, biocuration"] },
+          { time: "11:00–13:00", room: "Monroe", track: "Function", title: "Function COSI — Morning Session", type: "cosi", speakers: [] },
+          { time: "11:00–13:00", room: "IBC overflow", track: "Tech Talks", title: "Tech Talks — Morning", type: "special", speakers: [] },
+          { time: "13:00–14:20", room: "All", track: "Lunch", title: "Lunch Break — On Your Own", type: "break", speakers: [] },
+          { time: "14:20–14:40", room: "Int'l Ballroom Center", track: "HiTSeq", title: "Optimizing sparse and skew hashing: faster k-mer dictionaries", type: "cosi",
+            speakers: [{ name: "Rob Patro", affiliation: "et al.", role: "Proceedings" }] },
+          { time: "14:40–15:00", room: "Int'l Ballroom Center", track: "HiTSeq", title: "10-minimizers: a promising class of constant-space minimizers", type: "cosi",
+            speakers: [{ name: "Yaron Orenstein", affiliation: "et al." }] },
+          { time: "15:00–15:20", room: "Int'l Ballroom Center", track: "HiTSeq", title: "The gift of novelty: repeat-robust k-mer-based estimators of mutation rates", type: "cosi",
+            speakers: [{ name: "Haonan Wu", affiliation: "et al." }] },
+          { time: "15:20–15:40", room: "Int'l Ballroom Center", track: "HiTSeq", title: "Incorporating indel channels into average-case analysis of seed-chain-extend", type: "cosi",
+            speakers: [{ name: "Spencer Gibson", affiliation: "et al.", role: "Proceedings" }] },
+          { time: "15:40–16:00", room: "Int'l Ballroom Center", track: "HiTSeq", title: "ORION: High-Performance Barcode & UMI Correction for Oxford Nanopore Single-Cell Sequencing", type: "cosi",
+            speakers: [{ name: "Dohun Yi", affiliation: "et al." }] },
+          { time: "14:20–15:20", room: "Int'l Ballroom East (IBE)", track: "iRNA", title: "iRNA Keynote: Expanding RNA Biology with XNAs", type: "cosi", highlight: true,
+            speakers: [{ name: "Lijun Zhou", affiliation: "University of Pennsylvania", talk: "Expanding RNA Biology with XNAs: In Vitro Evolution of Non-natural Nucleic Acids for Recognition and Catalysis", role: "Keynote" }] },
+          { time: "15:20–16:00", room: "Int'l Ballroom East (IBE)", track: "iRNA", title: "iRNA — Abstract Talks", type: "cosi", highlight: true, speakers: [] },
+          { time: "14:20–16:00", room: "Room 9-10 Combo", track: "RegSys", title: "RegSys — Afternoon Session", type: "cosi", speakers: [] },
+          { time: "14:20–16:00", room: "Cabinet", track: "CompMS", title: "CompMS — Afternoon Session", type: "cosi", speakers: [] },
+          { time: "14:20–16:00", room: "Georgetown", track: "NIH/ODSS", title: "NIH/ODSS — Afternoon", type: "special", speakers: [] },
+          { time: "14:20–16:00", room: "Jefferson West", track: "MICROBIOME", title: "MICROBIOME — Afternoon Session", type: "cosi", speakers: [] },
+          { time: "14:20–16:00", room: "Jefferson East", track: "Text Mining", title: "Text Mining — Afternoon Session", type: "cosi", speakers: [] },
+          { time: "14:20–16:00", room: "Lincoln West", track: "CSI", title: "CSI — Afternoon Session", type: "cosi", speakers: [] },
+          { time: "14:20–16:00", room: "Lincoln East", track: "BOKR", title: "BOKR — Afternoon Session", type: "cosi", highlight: true, speakers: [],
+            details: ["Short papers (20 min), flash updates (5 min), early career presentations","Topics: knowledge graphs in annotations, FAIR data, bio-curation, ML & knowledge representation"] },
+          { time: "14:20–16:00", room: "Monroe", track: "Function", title: "Function — Afternoon Session", type: "cosi", speakers: [] },
+          { time: "14:20–16:00", room: "IBC overflow", track: "Tech Talks", title: "Tech Talks — Afternoon", type: "special", speakers: [] },
+          { time: "16:00–16:40", room: "Columbia", track: "Break", title: "Caffeinate and Connect with Posters & Exhibitors", type: "break", speakers: [] },
+          { time: "16:20–16:40", room: "Int'l Ballroom Center", track: "HiTSeq", title: "SpatiaXen: Interactive Platform for Cell-Type-Resolved Spatial Transcriptomics", type: "cosi",
+            speakers: [{ name: "Anirban Chakraborty", affiliation: "et al." }] },
+          { time: "16:40–17:00", room: "Int'l Ballroom Center", track: "HiTSeq", title: "Detecting and reconstructing breakage-fusion-bridge cycles from long-read sequencing using BFBArchitect", type: "cosi",
+            speakers: [{ name: "Chaohui Li", affiliation: "et al.", role: "Proceedings" }] },
+          { time: "17:00–18:00", room: "Int'l Ballroom Center", track: "HiTSeq", title: "Keynote: Genetic & epigenetic engineering for deep space", type: "cosi",
+            speakers: [{ name: "Christopher E. Mason", affiliation: "Weill Cornell Medicine, USA", role: "Keynote" }] },
+          { time: "16:40–18:00", room: "Int'l Ballroom East (IBE)", track: "iRNA", title: "iRNA Keynote: Decoding the temporal landscape of mRNA modifications", type: "cosi", highlight: true,
+            speakers: [{ name: "Eduardo Eyras", affiliation: "Australian National University", talk: "Decoding the temporal landscape of mRNA modifications at single-molecule resolution (SWARM + dFORCE)", role: "Keynote" }] },
+          { time: "16:40–18:00", room: "Room 9-10 Combo", track: "RegSys", title: "RegSys — Late Afternoon Session", type: "cosi", speakers: [] },
+          { time: "16:40–18:00", room: "Georgetown", track: "NIH/ODSS", title: "NIH/ODSS — Late Afternoon", type: "special", speakers: [] },
+          { time: "16:40–18:00", room: "Jefferson West", track: "MICROBIOME", title: "MICROBIOME — Late Afternoon Session", type: "cosi", speakers: [] },
+          { time: "16:40–18:00", room: "Jefferson East", track: "Text Mining", title: "Text Mining — Late Afternoon Session", type: "cosi", speakers: [] },
+          { time: "16:40–18:00", room: "Lincoln West", track: "CSI", title: "CSI — Late Afternoon Session", type: "cosi", speakers: [] },
+          { time: "16:40–18:00", room: "Lincoln East", track: "BOKR", title: "BOKR — Late Afternoon Session", type: "cosi", highlight: true, speakers: [],
+            details: ["Session on: Neuro-symbolic methods, Semantic Web applications, ontologies for healthcare"] },
+          { time: "16:40–18:00", room: "Monroe", track: "Function", title: "Function — Late Afternoon Session", type: "cosi", speakers: [] },
+          { time: "16:40–18:00", room: "IBC overflow", track: "Tech Talks", title: "Tech Talks — Late Afternoon", type: "special", speakers: [] },
+          { time: "18:30–20:00", room: "TBD", track: "Social", title: "President's Reception (Invite Only)", type: "social", speakers: [] },
+        ]
+      },
+      {
+        id: "tue", label: "Tuesday", date: "July 14",
+        sessions: [
+          { time: "8:40–10:00", room: "International Ballroom Center (IBC)", track: "Keynote", title: "Morning Welcome, Fellows Introduction & Distinguished Keynote", type: "keynote",
+            speakers: [{ name: "Carlos D. Bustamante", affiliation: "Founder & CEO, Galatea Bio, USA", talk: "Enabling Precision Health at Scale for All" }] },
+          { time: "10:00–11:00", room: "Columbia", track: "Break", title: "Caffeinate and Connect with Posters & Exhibitors", type: "break", speakers: [] },
+          { time: "11:00–12:00", room: "Int'l Ballroom Center", track: "HiTSeq", title: "Keynote: From Reads to Transcripts to Biological Insight", type: "cosi",
+            speakers: [{ name: "Mihaela Pertea", affiliation: "Johns Hopkins University, USA", role: "Keynote" }] },
+          { time: "12:00–12:20", room: "Int'l Ballroom Center", track: "HiTSeq", title: "scVarSim: Unified Simulator for Benchmarking Variant Calling & RNA Editing in scRNA-seq", type: "cosi",
+            speakers: [{ name: "Weijian Wang", affiliation: "et al." }] },
+          { time: "12:20–12:40", room: "Int'l Ballroom Center", track: "HiTSeq", title: "Spatiotemporal cell type deconvolution leveraging tissue structure", type: "cosi",
+            speakers: [{ name: "Xiuwei Zhang", affiliation: "et al." }] },
+          { time: "12:40–13:00", room: "Int'l Ballroom Center", track: "HiTSeq", title: "MethylSeg: Context-Aware Methylome Segmentation for Robust PMD Detection", type: "cosi",
+            speakers: [{ name: "Jacob Tye", affiliation: "et al." }] },
+          { time: "11:00–13:00", room: "Int'l Ballroom East (IBE)", track: "iRNA", title: "iRNA — Morning Abstract Talks", type: "cosi", highlight: true, speakers: [],
+            details: ["Proceedings talks and selected abstracts — full list TBA on ISMB platform"] },
+          { time: "11:00–13:00", room: "Lincoln East", track: "BOKR/BOSC", title: "BOKR / BOSC Joint Session — Morning", type: "cosi", highlight: true,
+            speakers: [{ name: "Eric Green", affiliation: "NIH / National Human Genome Research Institute", talk: "From the Human Genome Project to the Realization of Genomic Medicine: A Scientific, Medical, and Societal Journey", role: "BOSC Keynote" }],
+            details: ["Joint session featuring talks selected from BOKR and BOSC abstract submissions","Talks on open data, reusable and reproducible science, ontology and open source community topics"] },
+          { time: "11:00–13:00", room: "Room 9-10 Combo", track: "RegSys", title: "RegSys — Morning Session", type: "cosi", speakers: [] },
+          { time: "11:00–13:00", room: "Cabinet", track: "Publishing Session", title: "Publishing Session: Rigorous ML Evaluation in Life Sciences", type: "special", speakers: [],
+            details: ["Best practices for benchmarking, uncertainty quantification, calibration, and reproducibility of ML methods"] },
+          { time: "11:00–13:00", room: "Georgetown", track: "BioInfo-Core", title: "BioInfo-Core — Morning Session", type: "cosi", speakers: [] },
+          { time: "11:00–13:00", room: "Jefferson West", track: "MICROBIOME", title: "MICROBIOME — Morning Session", type: "cosi", speakers: [] },
+          { time: "11:00–13:00", room: "Jefferson East", track: "SysMod", title: "SysMod — Morning Session", type: "cosi", speakers: [] },
+          { time: "11:00–13:00", room: "Lincoln West", track: "BioVis", title: "BioVis — Morning Session", type: "cosi", speakers: [] },
+          { time: "11:00–13:00", room: "Monroe", track: "Function", title: "Function — Morning Session", type: "cosi", speakers: [] },
+          { time: "11:00–13:00", room: "IBC overflow", track: "Tech Talks", title: "Tech Talks — Morning", type: "special", speakers: [] },
+          { time: "13:00–14:20", room: "All", track: "Lunch", title: "Lunch Break — On Your Own", type: "break", speakers: [] },
+          { time: "14:20–14:40", room: "Int'l Ballroom Center", track: "HiTSeq", title: "Amaranth: Enhanced Single-Cell Transcript Assembly via Discriminative Modeling", type: "cosi",
+            speakers: [{ name: "Xiaofei Carl Zang", affiliation: "et al." }] },
+          { time: "14:40–15:00", room: "Int'l Ballroom Center", track: "HiTSeq", title: "Minerva: Breakpoint-Guided Allele-Specific Copy Number Inference in Long-Read Cancer Genomes", type: "cosi",
+            speakers: [{ name: "Ayse Keskus", affiliation: "et al." }] },
+          { time: "15:00–15:20", room: "Int'l Ballroom Center", track: "HiTSeq", title: "Unravelling genome-wide mosaic microsatellite mutations at single-cell resolution", type: "cosi",
+            speakers: [{ name: "Yanmei Dou", affiliation: "" }] },
+          { time: "15:20–15:40", room: "Int'l Ballroom Center", track: "HiTSeq", title: "SQANTI-epi: Functional and Quality Annotation of Single-Molecule Epigenomic Data", type: "cosi",
+            speakers: [{ name: "Tianyuan Liu", affiliation: "et al." }] },
+          { time: "15:40–16:00", room: "Int'l Ballroom Center", track: "HiTSeq", title: "Likelihood-based optimization for accurate copy number estimation for paralogous genes (exome)", type: "cosi",
+            speakers: [{ name: "Sang Yoon Byun", affiliation: "et al.", role: "Proceedings" }] },
+          { time: "14:20–16:00", room: "Int'l Ballroom East (IBE)", track: "iRNA", title: "iRNA — Afternoon Abstract Talks", type: "cosi", highlight: true, speakers: [],
+            details: ["Selected abstract talks — full list TBA on ISMB platform"] },
+          { time: "14:20–16:00", room: "Lincoln East", track: "BOSC", title: "BOSC — Afternoon Session", type: "cosi", highlight: true, speakers: [],
+            details: ["Selected abstract talks on open source bioinformatics and open science","Full talk schedule: open-bio.org/events/bosc-2026/bosc-2026-schedule/"] },
+          { time: "14:20–16:00", room: "Monroe", track: "BOKR/Function", title: "BOKR / Function Joint Session", type: "cosi", highlight: true, speakers: [],
+            details: ["Talks selected from BOKR and Function COSI abstracts","Topics: function annotation using knowledge graphs and ontologies, CAFA methods"] },
+          { time: "14:20–16:00", room: "Room 9-10 Combo", track: "RegSys", title: "RegSys — Afternoon Session", type: "cosi", speakers: [] },
+          { time: "14:20–16:00", room: "Cabinet", track: "Industry Workshop", title: "Industry Workshop: AI/ML in Pharma, Biotech & VC", type: "special", speakers: [],
+            details: ["Panel 1: Real-world AI in drug discovery & genomics (AstraZeneca, Sanofi, 10X Genomics)","Panel 2: AI for Diagnostics (Tempus AI + others)","Panel 3: VC investment strategies in computational biology (Google Ventures, Khosla Ventures, Third Rock Ventures)"] },
+          { time: "14:20–16:00", room: "Georgetown", track: "BioInfo-Core", title: "BioInfo-Core — Afternoon Session", type: "cosi", speakers: [] },
+          { time: "14:20–16:00", room: "Jefferson West", track: "NetBio", title: "NetBio — Afternoon Session", type: "cosi", speakers: [] },
+          { time: "14:20–16:00", room: "Jefferson East", track: "SysMod", title: "SysMod — Afternoon Session", type: "cosi", speakers: [] },
+          { time: "14:20–16:00", room: "Lincoln West", track: "BioVis", title: "BioVis — Afternoon Session", type: "cosi", speakers: [] },
+          { time: "14:20–16:00", room: "IBC", track: "QLS", title: "QLS: Quantum for Life Sciences Session", type: "special", speakers: [],
+            details: ["Quantum computing and hybrid approaches for biology","Introduces DREAMQ — inaugural quantum DREAM challenge"] },
+          { time: "16:00–16:40", room: "Columbia", track: "Break", title: "Caffeinate and Connect with Posters & Exhibitors", type: "break", speakers: [] },
+          { time: "16:40–17:00", room: "Int'l Ballroom Center", track: "HiTSeq", title: "Seqwin: Ultrafast identification of signature sequences in microbial genomes", type: "cosi",
+            speakers: [{ name: "Michael X. Wang", affiliation: "et al.", role: "Proceedings" }] },
+          { time: "17:00–17:20", room: "Int'l Ballroom Center", track: "HiTSeq", title: "pHapCompass: Probabilistic Assembly and Uncertainty Quantification of Polyploid Haplotype Phase", type: "cosi",
+            speakers: [{ name: "Marjan Hosseini", affiliation: "et al.", role: "Proceedings" }] },
+          { time: "17:20–17:40", room: "Int'l Ballroom Center", track: "HiTSeq", title: "Pilot discovery of allele-specific modification QTLs from long-read RNA sequencing", type: "cosi",
+            speakers: [{ name: "Michael Goneos", affiliation: "et al." }] },
+          { time: "17:40–18:00", room: "Int'l Ballroom Center", track: "HiTSeq", title: "CRANE: Correcting Errors in Raw Nanopore Signals Using Hidden Markov Models", type: "cosi",
+            speakers: [{ name: "Simon Ambrozak", affiliation: "et al." }] },
+          { time: "16:40–18:00", room: "Int'l Ballroom East (IBE)", track: "iRNA", title: "iRNA — Late Afternoon Session", type: "cosi", highlight: true, speakers: [] },
+          { time: "16:40–18:00", room: "Lincoln East", track: "BOSC", title: "BOSC — Late Afternoon: Keynote + Panel", type: "cosi", highlight: true,
+            speakers: [{ name: "Maryam Zaringhalam", affiliation: "NIH / National Library of Medicine", talk: "Science for the People: Open science to engage and build trust with communities", role: "BOSC Keynote" }],
+            details: ["Panel: Open Source in the Age of AI — Panelists: Eric Green, Aida Miro-Herrans, Nahid Zeinali, Alex Bateman · Moderator: Jason Williams"] },
+          { time: "16:40–18:00", room: "Room 9-10 Combo", track: "RegSys", title: "RegSys — Late Afternoon", type: "cosi", speakers: [] },
+          { time: "16:40–18:00", room: "Cabinet", track: "Career Symposium", title: "Computational Biology Careers Symposium", type: "special", speakers: [] },
+          { time: "16:40–18:00", room: "Georgetown", track: "BioInfo-Core", title: "BioInfo-Core — Late Afternoon", type: "cosi", speakers: [] },
+          { time: "16:40–18:00", room: "Jefferson West", track: "NetBio", title: "NetBio — Late Afternoon", type: "cosi", speakers: [] },
+          { time: "16:40–18:00", room: "Jefferson East", track: "SysMod", title: "SysMod — Late Afternoon", type: "cosi", speakers: [] },
+          { time: "16:40–18:00", room: "Lincoln West", track: "BioVis", title: "BioVis — Late Afternoon", type: "cosi", speakers: [] },
+          { time: "16:40–18:00", room: "Monroe", track: "Function", title: "Function — Late Afternoon", type: "cosi", speakers: [] },
+          { time: "16:40–18:00", room: "IBC", track: "BOKR", title: "BOKR — Late Afternoon (standalone)", type: "cosi", highlight: true, speakers: [],
+            details: ["BOKR-only session: evaluation of knowledge graphs and ontologies, bio-curation platforms, reasoning"] },
+          { time: "18:00–19:30", room: "International Terrace", track: "Social", title: "Success Circles — Reinvented Networking", type: "social", speakers: [],
+            details: ["Small groups led by knowledgeable facilitators across computational biology topics"] },
+        ]
+      },
+      {
+        id: "wed", label: "Wednesday", date: "July 15",
+        sessions: [
+          { time: "8:50–10:00", room: "International Ballroom Center (IBC)", track: "Keynote", title: "Morning Welcome & Distinguished Keynote", type: "keynote",
+            speakers: [{ name: "Partha P Majumder", affiliation: "John C. Martin Centre for Liver Research & Innovations, India", talk: "Uncovering the Palimpsest of India's Population History Using Genome-Scale Analysis: Implications for Disease Epidemiology" }] },
+          { time: "10:00–11:00", room: "Columbia", track: "Break", title: "Caffeinate and Connect with Posters & Exhibitors", type: "break", speakers: [] },
+          { time: "8:30–8:45", room: "Monroe", track: "ICBO", title: "ICBO Opening Remarks", type: "special", speakers: [{ name: "Asiyah Lin", affiliation: "ICBO Organizing Committee" }] },
+          { time: "8:45–9:30", room: "Monroe", track: "ICBO", title: "ICBO Invited Talk: Curation of early research data — when humans and machines partner", type: "special",
+            speakers: [{ name: "Birgit Meldal", affiliation: "Pfizer (Virtual)" }] },
+          { time: "9:30–10:00", room: "Monroe", track: "ICBO", title: "ICBO Journal Track: OnTEPT — a multimodal OWL ontology for post-traumatic stress disorder", type: "special",
+            speakers: [{ name: "Jose Alejandro Salazar Castro", affiliation: "(Virtual)" }] },
+          { time: "11:00–12:00", room: "Monroe", track: "ICBO", title: "ICBO Keynote: Toward a complete lexicon of cell types in the biomedical literature", type: "special",
+            speakers: [{ name: "Richard Scheuermann", affiliation: "NIH / National Library of Medicine" }] },
+          { time: "12:00–12:20", room: "Monroe", track: "ICBO", title: "ICBO: Investigating the use of an ontology for grounding LLMs — GraphRAG with the Foundational Model of Anatomy", type: "special",
+            speakers: [{ name: "Landon Todd Detwiler", affiliation: "" }] },
+          { time: "12:20–12:40", room: "Monroe", track: "ICBO", title: "ICBO: Frontier LLM-based agents can overcome the ontology curation bottleneck for natural phenotypes", type: "special",
+            speakers: [{ name: "James Balhoff", affiliation: "" }] },
+          { time: "12:40–13:00", room: "Monroe", track: "ICBO", title: "ICBO: Evidencell — an agentic research assistant for the Cell Ontology", type: "special",
+            speakers: [{ name: "David Osumi-Sutherland", affiliation: "" }] },
+          { time: "14:20–15:05", room: "Monroe", track: "ICBO", title: "ICBO Invited Talk: Environmental Health Language Collaborative — ontologies for Exposomics", type: "special",
+            speakers: [{ name: "Maria Shatz", affiliation: "NIH / NIEHS" }] },
+          { time: "15:05–15:25", room: "Monroe", track: "ICBO", title: "ICBO: Consistent but Incorrect — Detecting Discrepancies in Ontologies", type: "special",
+            speakers: [{ name: "Christian Kindermann", affiliation: "" }] },
+          { time: "15:25–15:45", room: "Monroe", track: "ICBO", title: "ICBO: The Injury Ontology", type: "special",
+            speakers: [{ name: "Regina Hurley", affiliation: "(Virtual)" }] },
+          { time: "15:45–16:00", room: "Monroe", track: "ICBO", title: "ICBO: ROBOKOP Biomedical Knowledge Graph — Leveraging Ontologies for Data Normalization", type: "special",
+            speakers: [{ name: "Karamarie Fecho", affiliation: "(Virtual)" }] },
+          { time: "16:40–17:10", room: "Monroe", track: "ICBO", title: "ICBO Industry Talk: Autopoiesis AI — Global Substance Knowledge System (GSKS)", type: "special",
+            speakers: [{ name: "Larry Callahan", affiliation: "Autopoiesis AI" }] },
+          { time: "17:10–17:40", room: "Monroe", track: "ICBO", title: "ICBO Journal Track: ACCELERATE-BASSO — Behavioral & Social Science Research through Ontology Best Practices", type: "special",
+            speakers: [{ name: "Cui Tao", affiliation: "" }] },
+          { time: "17:40–18:30", room: "Monroe", track: "ICBO", title: "ICBO Invited Talk: Evolution of Health Data Standards at NLM — Implications for the AI Era", type: "special",
+            speakers: [{ name: "Rajkumar Cholan", affiliation: "NIH / NLM (Virtual)" }] },
+          { time: "19:00–21:00", room: "TBD", track: "ICBO", title: "ICBO Dinner / Social Event", type: "social", speakers: [] },
+          { time: "11:00–13:00", room: "IBC", track: "MLCSB", title: "MLCSB — Morning Session", type: "cosi", speakers: [] },
+          { time: "11:00–13:00", room: "IBW", track: "TransMed", title: "TransMed — Morning Session", type: "cosi", speakers: [] },
+          { time: "11:00–13:00", room: "IBE", track: "3DSIG", title: "3DSIG — Morning Session", type: "cosi", speakers: [] },
+          { time: "11:00–13:00", room: "Room 9-10 Combo", track: "NetBio", title: "NetBio — Morning Session", type: "cosi", speakers: [] },
+          { time: "11:00–13:00", room: "Cabinet", track: "WEB", title: "WEB: Workshop on Education for Bioinformatics", type: "special", speakers: [] },
+          { time: "11:00–13:00", room: "Georgetown", track: "GenCompBio", title: "GenCompBio — Morning Session", type: "cosi", speakers: [] },
+          { time: "11:00–13:00", room: "Jefferson West", track: "EvolCompGen", title: "EvolCompGen — Morning Session", type: "cosi", speakers: [] },
+          { time: "11:00–13:00", room: "Jefferson East", track: "VarI", title: "VarI — Morning Session", type: "cosi", speakers: [] },
+          { time: "11:00–13:00", room: "Lincoln West", track: "BOSC", title: "BOSC — Morning Session", type: "cosi", highlight: true, speakers: [],
+            details: ["Abstract talks on open source bioinformatics, open data, reproducibility, community tools"] },
+          { time: "11:00–13:00", room: "Lincoln East", track: "CAMDA", title: "CAMDA — Morning Session", type: "cosi", speakers: [],
+            details: ["2026 Challenges: Health Privacy (bulk + scRNA-seq), Synthetic EHR (diabetes), AMR Prediction, Gut Microbiome Health Index"] },
+          { time: "13:00–14:20", room: "All", track: "Lunch", title: "Lunch Break — On Your Own", type: "break", speakers: [] },
+          { time: "14:20–16:00", room: "IBC", track: "MLCSB", title: "MLCSB — Afternoon Session", type: "cosi", speakers: [] },
+          { time: "14:20–16:00", room: "IBW", track: "TransMed", title: "TransMed — Afternoon Session", type: "cosi", speakers: [] },
+          { time: "14:20–16:00", room: "IBE", track: "3DSIG", title: "3DSIG — Afternoon Session", type: "cosi", speakers: [] },
+          { time: "14:20–16:00", room: "Room 9-10 Combo", track: "NetBio", title: "NetBio — Afternoon Session", type: "cosi", speakers: [] },
+          { time: "14:20–16:00", room: "Cabinet", track: "WEB", title: "WEB — Afternoon Session", type: "special", speakers: [] },
+          { time: "14:20–16:00", room: "Georgetown", track: "GenCompBio", title: "GenCompBio — Afternoon Session", type: "cosi", speakers: [] },
+          { time: "14:20–16:00", room: "Jefferson West", track: "EvolCompGen", title: "EvolCompGen — Afternoon Session", type: "cosi", speakers: [] },
+          { time: "14:20–16:00", room: "Jefferson East", track: "VarI", title: "VarI — Afternoon Session", type: "cosi", speakers: [] },
+          { time: "14:20–16:00", room: "Lincoln West", track: "BOSC", title: "BOSC — Afternoon: Panel on Open Source in the Age of AI", type: "cosi", highlight: true,
+            speakers: [{ name: "Panel: Open Source in the Age of AI", affiliation: "Panelists: Eric Green, Aida Miro-Herrans, Nahid Zeinali, Alex Bateman · Moderator: Jason Williams", role: "Panel" }] },
+          { time: "14:20–16:00", room: "Lincoln East", track: "CAMDA", title: "CAMDA — Afternoon Session", type: "cosi", speakers: [] },
+          { time: "16:00–16:40", room: "Columbia", track: "Break", title: "Caffeinate and Connect with Posters & Exhibitors", type: "break", speakers: [] },
+          { time: "16:40–18:00", room: "IBC", track: "MLCSB", title: "MLCSB — Late Afternoon", type: "cosi", speakers: [] },
+          { time: "16:40–18:00", room: "IBW", track: "TransMed", title: "TransMed — Late Afternoon", type: "cosi", speakers: [] },
+          { time: "16:40–18:00", room: "IBE", track: "3DSIG", title: "3DSIG — Late Afternoon", type: "cosi", speakers: [] },
+          { time: "16:40–18:00", room: "Room 9-10 Combo", track: "NetBio", title: "NetBio — Late Afternoon", type: "cosi", speakers: [] },
+          { time: "16:40–18:00", room: "Cabinet", track: "WEB", title: "WEB — Late Afternoon", type: "special", speakers: [] },
+          { time: "16:40–18:00", room: "Georgetown", track: "GenCompBio", title: "GenCompBio — Late Afternoon", type: "cosi", speakers: [] },
+          { time: "16:40–18:00", room: "Jefferson West", track: "EvolCompGen", title: "EvolCompGen — Late Afternoon", type: "cosi", speakers: [] },
+          { time: "16:40–18:00", room: "Jefferson East", track: "VarI", title: "VarI — Late Afternoon", type: "cosi", speakers: [] },
+          { time: "16:40–18:00", room: "Lincoln West", track: "BOSC", title: "BOSC — Late Afternoon: Panel on Resilient Open Science", type: "cosi", highlight: true,
+            speakers: [{ name: "Panel: Policies and Strategies for Resilient Open Science", affiliation: "Panelists: Maryam Zaringhalam, Ann Nowakowski, Mallory Freeberg, Guy Cochrane, Sam Halabi · Moderator: Mónica Muñoz Torres", role: "Panel" }] },
+          { time: "16:40–18:00", room: "Lincoln East", track: "CAMDA", title: "CAMDA — Late Afternoon", type: "cosi", speakers: [] },
+        ]
+      },
+      {
+        id: "thu", label: "Thursday", date: "July 16",
+        sessions: [
+          { time: "8:40–10:00", room: "IBC", track: "MLCSB", title: "MLCSB — Morning Session", type: "cosi", speakers: [] },
+          { time: "8:40–10:00", room: "IBE", track: "3DSIG", title: "3DSIG — Morning Session", type: "cosi", speakers: [] },
+          { time: "8:40–10:00", room: "Room 9-10 Combo", track: "Bioinformatics in USA", title: "Bioinformatics in the USA — Morning", type: "special", speakers: [] },
+          { time: "8:40–10:00", room: "Cabinet", track: "Education", title: "Education COSI — Morning Session", type: "cosi", speakers: [] },
+          { time: "8:40–10:00", room: "Georgetown", track: "GenCompBio", title: "GenCompBio — Morning Session", type: "cosi", speakers: [] },
+          { time: "8:40–10:00", room: "Jefferson West", track: "EvolCompGen", title: "EvolCompGen — Morning Session", type: "cosi", speakers: [] },
+          { time: "8:40–10:00", room: "Jefferson East", track: "Equity & Diversity", title: "Equity and Diversity in Computational Biology Research", type: "special", speakers: [] },
+          { time: "8:40–10:00", room: "Lincoln East", track: "CAMDA", title: "CAMDA — Morning Session", type: "cosi", speakers: [],
+            details: ["Best-contributed analysis voting; CAMDA Trophy award to top 3 presenters"] },
+          { time: "8:20–8:30", room: "Monroe", track: "ICBO", title: "ICBO Day 2 Opening Remarks", type: "special", speakers: [{ name: "Anna Maria Masci", affiliation: "ICBO Organizing Committee" }] },
+          { time: "8:30–9:15", room: "Monroe", track: "ICBO", title: "ICBO Invited Talk: Disease data standardization — role of ontologies, NER and AI in biocuration", type: "special",
+            speakers: [{ name: "Lynn Schriml", affiliation: "University of Maryland" }] },
+          { time: "9:15–10:00", room: "Monroe", track: "ICBO", title: "ICBO Invited Talk: Toward an AI-Ready Data Ecosystem — ontologies for NIAID data findability", type: "special",
+            speakers: [{ name: "Reed Shabman", affiliation: "NIAID" }] },
+          { time: "10:00–11:00", room: "Columbia", track: "Break", title: "Caffeinate and Connect with Posters & Exhibitors", type: "break", speakers: [] },
+          { time: "11:00–12:00", room: "Monroe", track: "ICBO", title: "ICBO Special Event — Panel: NeuroSymbolic Methods and Ontology", type: "special",
+            speakers: [{ name: "Michel Dumontier", affiliation: "Moderator", role: "Panel" }] },
+          { time: "12:00–12:45", room: "Monroe", track: "ICBO", title: "ICBO Community Engagement: Future direction of biomedical ontology development in the AI era", type: "special",
+            speakers: [{ name: "Asiyah Yu Lin / Anna Maria Masci", affiliation: "ICBO Organizing Committee" }] },
+          { time: "12:45–13:00", room: "Monroe", track: "ICBO", title: "ICBO Concluding Remarks / Feedback Session", type: "special", speakers: [] },
+          { time: "13:00–14:20", room: "All", track: "Lunch", title: "Lunch Break — On Your Own", type: "break", speakers: [] },
+          { time: "14:20–18:00", room: "Lincoln West", track: "ICBO", title: "ICBO — VDOS Workshop: Vaccine and Drug Ontology Studies", type: "special", speakers: [],
+            details: ["15th VDOS: AI and LLMs in ontology studies, adverse events, drug interactions, immune responses"] },
+          { time: "11:00–13:00", room: "IBC", track: "MLCSB", title: "MLCSB — Late Morning Session", type: "cosi", speakers: [] },
+          { time: "11:00–13:00", room: "IBE", track: "3DSIG", title: "3DSIG — Late Morning Session", type: "cosi", speakers: [] },
+          { time: "11:00–13:00", room: "Room 9-10 Combo", track: "Bioinformatics in USA", title: "Bioinformatics in the USA — Late Morning", type: "special", speakers: [] },
+          { time: "11:00–13:00", room: "Cabinet", track: "Education", title: "Education COSI — Late Morning", type: "cosi", speakers: [] },
+          { time: "11:00–13:00", room: "Georgetown", track: "GenCompBio", title: "GenCompBio — Late Morning", type: "cosi", speakers: [] },
+          { time: "11:00–13:00", room: "Jefferson West", track: "EvolCompGen", title: "EvolCompGen — Late Morning", type: "cosi", speakers: [] },
+          { time: "11:00–13:00", room: "Jefferson East", track: "Pathogen Data Network", title: "Pathogen Data Network Forum", type: "special", speakers: [],
+            details: ["Town-hall forum for infectious disease data researchers","Hosted by PDN, BV-BRC, BRC Analytics/Galaxy (NIH NIAID award U24AI183840)"] },
+          { time: "11:00–13:00", room: "Lincoln West", track: "NVIDIA Workshop", title: "NVIDIA Workshop", type: "special", speakers: [] },
+          { time: "11:00–13:00", room: "Lincoln East", track: "CAMDA", title: "CAMDA — Late Morning", type: "cosi", speakers: [] },
+          { time: "14:20–16:00", room: "IBC", track: "MLCSB", title: "MLCSB — Afternoon Session", type: "cosi", speakers: [] },
+          { time: "14:20–16:00", room: "IBE", track: "3DSIG", title: "3DSIG — Afternoon Session", type: "cosi", speakers: [] },
+          { time: "14:20–16:00", room: "Room 9-10 Combo", track: "Bioinformatics in USA", title: "Bioinformatics in the USA — Afternoon", type: "special", speakers: [] },
+          { time: "14:20–16:00", room: "Cabinet", track: "Education", title: "Education COSI — Afternoon", type: "cosi", speakers: [] },
+          { time: "14:20–16:00", room: "Georgetown", track: "GenCompBio", title: "GenCompBio — Afternoon", type: "cosi", speakers: [] },
+          { time: "14:20–16:00", room: "Jefferson West", track: "EvolCompGen", title: "EvolCompGen — Afternoon", type: "cosi", speakers: [] },
+          { time: "14:20–16:00", room: "Lincoln East", track: "CAMDA", title: "CAMDA — Afternoon (Best Contributions Awards)", type: "cosi", speakers: [] },
+          { time: "16:00–16:40", room: "Columbia", track: "Break", title: "Caffeinate and Connect with Posters & Exhibitors", type: "break", speakers: [] },
+          { time: "16:40–18:00", room: "International Ballroom Center (IBC)", track: "Keynote", title: "Distinguished Keynote & Closing Ceremonies", type: "keynote",
+            speakers: [{ name: "Marinka Zitnik", affiliation: "Harvard Medical School, USA", talk: "Foundations of Human-AI Co-Science", award: "ISCB 2026 Overton Prize" }] },
+        ]
+      },
+    ];
+
+    // ─── COLORS ──────────────────────────────────────────────────────────────────
+    const TRACK_COLORS = {
+      Keynote:{bg:"#1a1a2e",text:"#e0c46c",border:"#e0c46c"},HiTSeq:{bg:"#0d3b4a",text:"#5dd9c1",border:"#5dd9c1"},iRNA:{bg:"#2d1b4e",text:"#c084fc",border:"#c084fc"},RegSys:{bg:"#1a3a2e",text:"#4ade80",border:"#4ade80"},CompMS:{bg:"#3a1a1a",text:"#f87171",border:"#f87171"},MICROBIOME:{bg:"#1a2a3a",text:"#60a5fa",border:"#60a5fa"},"Text Mining":{bg:"#3a2a1a",text:"#fb923c",border:"#fb923c"},BOKR:{bg:"#1a1a3a",text:"#a78bfa",border:"#a78bfa"},BOSC:{bg:"#1a3a3a",text:"#34d399",border:"#34d399"},"BOKR/BOSC":{bg:"#2a1a3a",text:"#c084fc",border:"#c084fc"},"BOKR/Function":{bg:"#2a1a3a",text:"#a78bfa",border:"#a78bfa"},Function:{bg:"#3a1a3a",text:"#f472b6",border:"#f472b6"},CSI:{bg:"#1a3a1a",text:"#86efac",border:"#86efac"},MLCSB:{bg:"#2a2a1a",text:"#fde047",border:"#fde047"},TransMed:{bg:"#2a1a1a",text:"#fca5a5",border:"#fca5a5"},"3DSIG":{bg:"#1a2a2a",text:"#67e8f9",border:"#67e8f9"},NetBio:{bg:"#1a1a3a",text:"#818cf8",border:"#818cf8"},SysMod:{bg:"#2a3a1a",text:"#a3e635",border:"#a3e635"},BioVis:{bg:"#3a2a2a",text:"#fdba74",border:"#fdba74"},EvolCompGen:{bg:"#1a3a2a",text:"#6ee7b7",border:"#6ee7b7"},VarI:{bg:"#3a1a2a",text:"#f9a8d4",border:"#f9a8d4"},CAMDA:{bg:"#2a2a3a",text:"#93c5fd",border:"#93c5fd"},GenCompBio:{bg:"#2a3a2a",text:"#bbf7d0",border:"#bbf7d0"},DREAM:{bg:"#3a3a1a",text:"#fef08a",border:"#fef08a"},"BioInfo-Core":{bg:"#1a2a3a",text:"#7dd3fc",border:"#7dd3fc"},Education:{bg:"#2a2a2a",text:"#d4d4d4",border:"#d4d4d4"},Tutorials:{bg:"#1f2937",text:"#9ca3af",border:"#4b5563"},Break:{bg:"#111827",text:"#6b7280",border:"#374151"},Lunch:{bg:"#111827",text:"#6b7280",border:"#374151"},Social:{bg:"#1c1917",text:"#d6c394",border:"#92400e"},"Career Fair":{bg:"#1c1917",text:"#d6c394",border:"#92400e"},"Tech Talks":{bg:"#1a2a3a",text:"#7dd3fc",border:"#7dd3fc"},"NIH/ODSS":{bg:"#1a2a1a",text:"#86efac",border:"#86efac"},ICBO:{bg:"#2a1a2a",text:"#e879f9",border:"#e879f9"},WEB:{bg:"#1a3a1a",text:"#4ade80",border:"#4ade80"},SCS:{bg:"#1c1917",text:"#d6c394",border:"#92400e"},YBS:{bg:"#1c1917",text:"#fbbf24",border:"#fbbf24"},"Bioinformatics in USA":{bg:"#1a2a2a",text:"#67e8f9",border:"#67e8f9"},"NVIDIA Workshop":{bg:"#1a3a1a",text:"#76e85d",border:"#76e85d"},"Pathogen Data Network":{bg:"#3a1a1a",text:"#f87171",border:"#f87171"},"Equity & Diversity":{bg:"#2a1a3a",text:"#c084fc",border:"#c084fc"},QLS:{bg:"#1a1a2e",text:"#818cf8",border:"#818cf8"},"Career Symposium":{bg:"#1c1917",text:"#d6c394",border:"#92400e"},"Publishing Session":{bg:"#2a2a2a",text:"#d4d4d4",border:"#4b5563"},"Industry Workshop":{bg:"#2a1a1a",text:"#fca5a5",border:"#fca5a5"},
+    };
+    const getColor = (t) => TRACK_COLORS[t] || { bg:"#1a1a2e", text:"#94a3b8", border:"#334155" };
+    const HIGHLIGHT_TRACKS = new Set(["HiTSeq","iRNA","BOKR","BOSC","BOKR/BOSC","BOKR/Function"]);
+
+    // ─── APP ─────────────────────────────────────────────────────────────────────
+    function App() {
+      const [activeDay, setActiveDay] = useState("mon");
+      const [selectedTracks, setSelectedTracks] = useState(new Set());
+      const [showOnlyHighlight, setShowOnlyHighlight] = useState(false);
+      const [searchQuery, setSearchQuery] = useState("");
+      const [expandedSession, setExpandedSession] = useState(null);
+      const [infoTrack, setInfoTrack] = useState(null);
+
+      const currentDay = DAYS.find(d => d.id === activeDay);
+
+      const filteredSessions = useMemo(() => {
+        if (!currentDay) return [];
+        return currentDay.sessions.filter(s => {
+          if (showOnlyHighlight && !HIGHLIGHT_TRACKS.has(s.track)) return false;
+          if (selectedTracks.size > 0 && !selectedTracks.has(s.track)) return false;
+          if (searchQuery) {
+            const q = searchQuery.toLowerCase();
+            const meta = TRACK_META[s.track];
+            if (![s.title, s.track, s.room, ...(s.speakers||[]).map(sp=>sp.name+" "+(sp.talk||"")), meta?.desc||"", ...(meta?.keywords||[])].some(t => t.toLowerCase().includes(q))) return false;
+          }
+          return true;
+        });
+      }, [currentDay, selectedTracks, showOnlyHighlight, searchQuery]);
+
+      const toggleTrack = t => setSelectedTracks(prev => { const n = new Set(prev); n.has(t)?n.delete(t):n.add(t); return n; });
+
+      return (
+        <div style={{background:"#0a0f1e",minHeight:"100vh",color:"#e2e8f0",fontFamily:"'Inter','Segoe UI',sans-serif"}}>
+          {/* Header */}
+          <div style={{background:"linear-gradient(135deg,#0f172a 0%,#1e1b4b 50%,#0f172a 100%)",borderBottom:"1px solid #1e3a5f",padding:"24px 20px 16px"}}>
+            <div style={{maxWidth:1200,margin:"0 auto"}}>
+              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:4}}>
+                <div style={{width:8,height:8,borderRadius:"50%",background:"#38bdf8",boxShadow:"0 0 8px #38bdf8"}}/>
+                <span style={{fontSize:11,letterSpacing:3,color:"#64748b",textTransform:"uppercase",fontWeight:600}}>34th Annual Conference</span>
+              </div>
+              <h1 style={{margin:0,fontSize:"clamp(24px,5vw,40px)",fontWeight:800,letterSpacing:"-0.5px",color:"#f8fafc"}}>ISMB <span style={{color:"#38bdf8"}}>2026</span></h1>
+              <p style={{margin:"6px 0 0",color:"#64748b",fontSize:14}}>Washington Hilton, Washington DC · July 12–16 · Hybrid In-Person & Virtual</p>
+              <div style={{marginTop:12,display:"flex",flexWrap:"wrap",gap:6}}>
+                {["HiTSeq","iRNA","BOKR","BOSC","MLCSB","3DSIG","RegSys","ICBO","CAMDA"].map(t=>{const c=getColor(t);return<span key={t} style={{fontSize:11,padding:"2px 8px",borderRadius:4,border:`1px solid ${c.border}`,color:c.text,background:c.bg,fontWeight:600}}>{t}</span>;})}
+                <span style={{fontSize:11,padding:"2px 8px",borderRadius:4,border:"1px solid #334155",color:"#64748b",background:"#0f172a"}}>+ 14 more</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Day tabs */}
+          <div style={{background:"#0d1117",borderBottom:"1px solid #1e2d3d",overflowX:"auto"}}>
+            <div style={{maxWidth:1200,margin:"0 auto",display:"flex"}}>
+              {DAYS.map(d=>(
+                <button key={d.id} onClick={()=>{setActiveDay(d.id);setExpandedSession(null);}}
+                  style={{padding:"14px 20px",background:activeDay===d.id?"#1e3a5f":"transparent",border:"none",borderBottom:activeDay===d.id?"2px solid #38bdf8":"2px solid transparent",color:activeDay===d.id?"#38bdf8":"#64748b",cursor:"pointer",fontSize:14,fontWeight:activeDay===d.id?700:400,whiteSpace:"nowrap"}}>
+                  <div style={{fontSize:11,opacity:0.7,marginBottom:2}}>{d.label}</div>
+                  <div>Jul {d.date.split(" ")[1]}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Controls */}
+          <div style={{background:"#0d1117",padding:"12px 20px",borderBottom:"1px solid #1e2d3d"}}>
+            <div style={{maxWidth:1200,margin:"0 auto",display:"flex",flexWrap:"wrap",gap:10,alignItems:"center"}}>
+              <input placeholder="🔍 Search sessions, speakers, topics, keywords…" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}
+                style={{background:"#161f2e",border:"1px solid #1e3a5f",borderRadius:6,color:"#e2e8f0",padding:"7px 12px",fontSize:13,flex:"1 1 220px",minWidth:180,outline:"none"}}/>
+              <button onClick={()=>setShowOnlyHighlight(!showOnlyHighlight)}
+                style={{padding:"7px 14px",borderRadius:6,border:showOnlyHighlight?"1px solid #a78bfa":"1px solid #334155",background:showOnlyHighlight?"#2d1b4e":"#161f2e",color:showOnlyHighlight?"#c084fc":"#64748b",cursor:"pointer",fontSize:12,fontWeight:600,whiteSpace:"nowrap"}}>
+                ⭐ HiTSeq / iRNA / BOKR / BOSC
+              </button>
+              {selectedTracks.size>0&&<button onClick={()=>setSelectedTracks(new Set())} style={{padding:"7px 12px",borderRadius:6,border:"1px solid #334155",background:"#161f2e",color:"#94a3b8",cursor:"pointer",fontSize:12}}>Clear ({selectedTracks.size})</button>}
+              <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                {["HiTSeq","iRNA","BOKR","BOSC","ICBO","Keynote","MLCSB","CAMDA"].map(t=>{const c=getColor(t);const active=selectedTracks.has(t);return(
+                  <button key={t} onClick={()=>toggleTrack(t)} style={{padding:"4px 10px",borderRadius:4,border:`1px solid ${active?c.border:"#334155"}`,background:active?c.bg:"transparent",color:active?c.text:"#64748b",cursor:"pointer",fontSize:11,fontWeight:600}}>{t}</button>);
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Track info modal */}
+          {infoTrack&&TRACK_META[infoTrack]&&(
+            <div onClick={()=>setInfoTrack(null)} style={{position:"fixed",inset:0,background:"#000a",zIndex:50,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+              <div onClick={e=>e.stopPropagation()} style={{background:"#0f172a",border:`1px solid ${getColor(infoTrack).border}`,borderRadius:12,padding:24,maxWidth:500,width:"100%",maxHeight:"80vh",overflowY:"auto"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
+                  <div>
+                    <span style={{fontSize:10,padding:"2px 7px",borderRadius:3,border:`1px solid ${getColor(infoTrack).border}`,color:getColor(infoTrack).text,background:getColor(infoTrack).bg,fontWeight:700,display:"inline-block",marginBottom:8}}>
+                      {infoTrack}{TRACK_META[infoTrack]?.closed&&<span style={{marginLeft:6,color:"#f87171"}}>● Closed</span>}
+                    </span>
+                    <div style={{fontWeight:700,fontSize:15,color:"#f1f5f9"}}>{TRACK_META[infoTrack]?.full}</div>
+                  </div>
+                  <button onClick={()=>setInfoTrack(null)} style={{background:"none",border:"none",color:"#64748b",cursor:"pointer",fontSize:18,padding:0,marginLeft:12}}>✕</button>
+                </div>
+                <p style={{fontSize:13,color:"#94a3b8",lineHeight:1.6,margin:"0 0 12px"}}>{TRACK_META[infoTrack]?.desc}</p>
+                {TRACK_META[infoTrack]?.keywords&&<div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:12}}>{TRACK_META[infoTrack].keywords.map(k=><span key={k} style={{fontSize:10,padding:"2px 7px",borderRadius:3,background:"#1e2d3d",color:"#64748b",border:"1px solid #334155"}}>{k}</span>)}</div>}
+                {TRACK_META[infoTrack]?.url&&<a href={TRACK_META[infoTrack].url} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#38bdf8",textDecoration:"none"}}>Visit track website ↗</a>}
+              </div>
+            </div>
+          )}
+
+          {/* Sessions */}
+          <div style={{maxWidth:1200,margin:"0 auto",padding:"16px 20px 40px"}}>
+            <div style={{fontSize:12,color:"#475569",marginBottom:12}}>
+              {filteredSessions.length} sessions · {currentDay?.label}, {currentDay?.date}
+              <span style={{marginLeft:8,color:"#334155"}}>· Click track badge for info · Click session title to expand</span>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:7}}>
+              {filteredSessions.map((session,i)=>{
+                const c=getColor(session.track);
+                const isExpanded=expandedSession===i;
+                const isBreak=session.type==="break";
+                const isKeynote=session.type==="keynote";
+                const hasSpeakers=(session.speakers||[]).length>0;
+                const hasDetails=(session.details||[]).length>0;
+                const isClickable=hasSpeakers||hasDetails;
+                const meta=TRACK_META[session.track];
+                return(
+                  <div key={i} style={{background:isBreak?"#0d1117":c.bg,border:`1px solid ${isBreak?"#1e2d3d":isKeynote?c.border:c.border+"55"}`,borderLeft:`3px solid ${c.border}`,borderRadius:8,padding:isBreak?"8px 14px":"12px 16px",opacity:isBreak?0.55:1,boxShadow:isKeynote?`0 0 20px ${c.border}22`:"none"}}>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:8,alignItems:"flex-start"}}>
+                      <div style={{minWidth:90,fontSize:12,color:"#94a3b8",fontVariantNumeric:"tabular-nums",paddingTop:2}}>{session.time}</div>
+                      <span onClick={()=>!isBreak&&meta&&setInfoTrack(session.track)}
+                        style={{fontSize:10,fontWeight:700,letterSpacing:0.5,padding:"2px 7px",borderRadius:3,border:`1px solid ${c.border}88`,color:c.text,background:c.bg,whiteSpace:"nowrap",flexShrink:0,cursor:(meta&&!isBreak)?"help":"default",textDecoration:(meta&&!isBreak)?"underline dotted":"none"}}>
+                        {session.track}{meta?.closed&&<span style={{marginLeft:4,color:"#f87171",fontSize:8}}>●</span>}
+                      </span>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div onClick={()=>isClickable&&setExpandedSession(isExpanded?null:i)}
+                          style={{fontSize:isBreak?13:14,fontWeight:isKeynote?700:isBreak?400:600,color:isBreak?"#64748b":"#f1f5f9",lineHeight:1.4,cursor:isClickable?"pointer":"default"}}>
+                          {session.title}{isClickable&&<span style={{marginLeft:6,fontSize:10,color:"#475569"}}>{isExpanded?"▲":"▼"}</span>}
+                        </div>
+                        <div style={{fontSize:11,color:"#475569",marginTop:2}}>📍 {session.room}</div>
+                      </div>
+                      {!isExpanded&&hasSpeakers&&(
+                        <div style={{fontSize:11,color:c.text,opacity:0.8,alignSelf:"center",whiteSpace:"nowrap"}}>
+                          {session.speakers[0].name}{session.speakers.length>1?` +${session.speakers.length-1}`:""}
+                        </div>
+                      )}
+                    </div>
+                    {isExpanded&&(
+                      <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${c.border}33`}}>
+                        {(session.speakers||[]).map((sp,si)=>(
+                          <div key={si} style={{marginBottom:si<session.speakers.length-1?12:0,padding:"10px 12px",background:"#0a0f1e",borderRadius:6,border:`1px solid ${c.border}44`}}>
+                            <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:6}}>
+                              {sp.role&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:3,border:`1px solid ${c.border}`,color:c.text,fontWeight:700}}>{sp.role}</span>}
+                              {sp.award&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:3,border:"1px solid #e0c46c",color:"#e0c46c",fontWeight:700}}>🏆 {sp.award}</span>}
+                            </div>
+                            <div style={{fontWeight:700,color:"#f1f5f9",fontSize:14}}>{sp.name}</div>
+                            {sp.affiliation&&<div style={{fontSize:12,color:"#64748b",marginTop:2}}>{sp.affiliation}</div>}
+                            {sp.talk&&<div style={{fontSize:13,color:c.text,marginTop:8,fontStyle:"italic",lineHeight:1.5}}>"{sp.talk}"</div>}
+                          </div>
+                        ))}
+                        {(session.details||[]).length>0&&(
+                          <ul style={{margin:"8px 0 0",padding:0,listStyle:"none"}}>
+                            {session.details.map((d,di)=>(
+                              <li key={di} style={{fontSize:12,color:"#94a3b8",padding:"4px 0",borderBottom:di<session.details.length-1?"1px solid #1e2d3d":"none"}}>
+                                <span style={{color:c.text,marginRight:6}}>›</span>{d}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {filteredSessions.length===0&&(
+                <div style={{textAlign:"center",padding:"60px 20px",color:"#475569"}}>
+                  <div style={{fontSize:32,marginBottom:12}}>🔬</div>
+                  <div style={{fontSize:16,fontWeight:600}}>No sessions match your filters</div>
+                  <div style={{fontSize:13,marginTop:6}}>Try clearing filters or adjusting your search</div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{marginTop:32,padding:16,background:"#0d1117",borderRadius:8,border:"1px solid #1e2d3d"}}>
+              <div style={{fontSize:11,color:"#475569",marginBottom:8,fontWeight:600,textTransform:"uppercase",letterSpacing:1}}>Data Sources</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                {[
+                  {label:"Abridged Agenda (PDF)",url:"https://www.iscb.org/documents/programmes/programme.AbridgedAgenda.ISMB.2026.pdf"},
+                  {label:"Distinguished Keynotes",url:"https://www.iscb.org/ismb2026/whats-happening/distinguished-keynotes"},
+                  {label:"Track Details",url:"https://www.iscb.org/ismb2026/whats-happening/track-details"},
+                  {label:"HiTSeq Schedule",url:"https://www.hitseq.org/schedule.html"},
+                  {label:"iRNA COSI",url:"https://irna.iscb.org/"},
+                  {label:"BOSC 2026 Schedule",url:"https://www.open-bio.org/events/bosc-2026/bosc-2026-schedule/"},
+                  {label:"BOKR 2026",url:"https://sites.google.com/site/bioontologies/2026-meeting"},
+                  {label:"ICBO 2026 Agenda",url:"https://icbo-conference.github.io/icbo2026/agenda/"},
+                  {label:"CAMDA 2026",url:"http://camda.info/"},
+                  {label:"MICROBIOME COSI",url:"https://www.microbiome-cosi.org/ismb-2026/"},
+                ].map(s=>(
+                  <a key={s.url} href={s.url} target="_blank" rel="noopener noreferrer"
+                    style={{fontSize:11,color:"#38bdf8",textDecoration:"none",padding:"3px 8px",border:"1px solid #1e3a5f",borderRadius:4}}>{s.label} ↗</a>
+                ))}
+              </div>
+              <div style={{fontSize:10,color:"#334155",marginTop:8}}>
+                Last updated: July 13, 2026 · ● = closed track · HiTSeq & ICBO have full talk-level schedules; BOSC talks in linked Google Sheet; iRNA keynote speakers confirmed; most other COSI talk-level schedules load via ISCB's JS platform (not crawlable) — check individual COSI sites for details.
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
