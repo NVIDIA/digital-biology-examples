@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NVIDIA Digital Biology Examples</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --nvidia-green: #76b900;
+      --nvidia-green-dark: #5a8f00;
+      --bg: #0a0a0a;
+      --surface: #141414;
+      --surface-2: #1e1e1e;
+      --border: #2a2a2a;
+      --text: #e8e8e8;
+      --text-muted: #9a9a9a;
+      --font: "DM Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 16px;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(10, 10, 10, 0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 2rem;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      text-decoration: none;
+    }
+
+    .logo img {
+      height: 28px;
+      width: auto;
+    }
+
+    .header-divider {
+      width: 1px;
+      height: 24px;
+      background: var(--border);
+    }
+
+    .header-title {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    /* ── Hero ── */
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: 7rem 2rem 5rem;
+      text-align: center;
+      background: linear-gradient(160deg, #0a0a0a 0%, #0d1a00 60%, #0a0a0a 100%);
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 60% at 50% -10%, rgba(118, 185, 0, 0.18) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .hero-badge {
+      display: inline-block;
+      background: rgba(118, 185, 0, 0.12);
+      border: 1px solid rgba(118, 185, 0, 0.35);
+      color: var(--nvidia-green);
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 0.35rem 1rem;
+      border-radius: 2rem;
+      margin-bottom: 1.75rem;
+    }
+
+    .hero h1 {
+      font-size: clamp(2rem, 5vw, 3.5rem);
+      font-weight: 700;
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+      max-width: 780px;
+      margin: 0 auto 1.25rem;
+    }
+
+    .hero h1 span {
+      color: var(--nvidia-green);
+    }
+
+    .hero p {
+      font-size: 1.1rem;
+      color: var(--text-muted);
+      max-width: 640px;
+      margin: 0 auto 2.5rem;
+      line-height: 1.75;
+    }
+
+    .hero-cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--nvidia-green);
+      color: #000;
+      font-weight: 700;
+      font-size: 0.9rem;
+      letter-spacing: 0.04em;
+      padding: 0.8rem 1.75rem;
+      border-radius: 4px;
+      text-decoration: none;
+      transition: background 0.2s;
+    }
+
+    .hero-cta:hover { background: var(--nvidia-green-dark); }
+
+    /* ── Section ── */
+    section {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 5rem 2rem;
+    }
+
+    .section-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--nvidia-green);
+      margin-bottom: 0.6rem;
+    }
+
+    section h2 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      margin-bottom: 1rem;
+    }
+
+    section p {
+      color: var(--text-muted);
+      max-width: 680px;
+      line-height: 1.75;
+    }
+
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      max-width: 960px;
+      margin: 0 auto;
+    }
+
+    /* ── Cards ── */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1.25rem;
+      margin-top: 2.5rem;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.75rem;
+      text-decoration: none;
+      color: inherit;
+      transition: border-color 0.2s, transform 0.2s;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .card:hover {
+      border-color: var(--nvidia-green);
+      transform: translateY(-2px);
+    }
+
+    .card-icon {
+      font-size: 1.75rem;
+      line-height: 1;
+    }
+
+    .card h3 {
+      font-size: 1rem;
+      font-weight: 600;
+    }
+
+    .card p {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    .card-arrow {
+      margin-top: auto;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--nvidia-green);
+      letter-spacing: 0.04em;
+    }
+
+    /* ── Disclaimer ── */
+    .disclaimer {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--nvidia-green);
+      border-radius: 6px;
+      padding: 1.25rem 1.5rem;
+      margin-top: 2rem;
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      line-height: 1.7;
+    }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 2.5rem 2rem;
+      text-align: center;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    footer a { color: var(--nvidia-green); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <a class="logo" href="https://www.nvidia.com" target="_blank" rel="noopener">
+      <img src="images/nvidia-logo-horiz-rgb-wht-no-reg-for-screen.png" alt="NVIDIA" />
+    </a>
+    <div class="header-divider"></div>
+    <span class="header-title">Digital Biology Examples</span>
+  </header>
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-badge">Digital Biology &amp; Drug Discovery</div>
+    <h1>NVIDIA <span>Digital Biology</span> Examples</h1>
+    <p>
+      A curated collection of examples showcasing NVIDIA's suite of digital biology and
+      computational drug discovery solutions — from AI-powered protein folding and molecular
+      generation to structure-based drug design and virtual screening.
+    </p>
+    <a class="hero-cta" href="https://github.com/NVIDIA/digital-biology-examples" target="_blank" rel="noopener">
+      View on GitHub ↗
+    </a>
+  </div>
+
+  <!-- BioNeMo section -->
+  <section>
+    <p class="section-label">Platform</p>
+    <h2>BioNeMo</h2>
+    <p>
+      NVIDIA BioNeMo is an AI platform for drug discovery that simplifies and accelerates
+      the building and training of models using your own data, and scales deployment for
+      drug discovery applications.
+    </p>
+    <p style="margin-top:1rem;">
+      NVIDIA NIMs offer a set of optimized microservices for AI models used in drug discovery.
+      These prebuilt containers provide state-of-the-art performance and can be deployed anywhere —
+      going from zero to inference in minutes.
+    </p>
+  </section>
+
+  <hr class="divider" />
+
+  <!-- Getting Started -->
+  <section>
+    <p class="section-label">Getting Started</p>
+    <h2>Explore the Examples</h2>
+    <p>
+      Choose a starting point below. Each workflow is self-contained and documented with
+      step-by-step notebooks and client libraries.
+    </p>
+
+    <div class="cards">
+      <a class="card" href="https://github.com/NVIDIA/digital-biology-examples/tree/main/examples/nims" target="_blank" rel="noopener">
+        <div class="card-icon">🧬</div>
+        <h3>NIM Microservices</h3>
+        <p>
+          Protein folding, MSA search, molecular generation, docking, and more —
+          all via optimized NVIDIA NIM inference endpoints.
+        </p>
+        <span class="card-arrow">Explore NIMs ↗</span>
+      </a>
+
+      <a class="card" href="https://github.com/NVIDIA/digital-biology-examples/tree/main/examples/blueprints" target="_blank" rel="noopener">
+        <div class="card-icon">🗺️</div>
+        <h3>NIM Blueprints</h3>
+        <p>
+          End-to-end reference architectures for complex workflows like generative
+          virtual screening, combining multiple NIMs into production-ready pipelines.
+        </p>
+        <span class="card-arrow">Explore Blueprints ↗</span>
+      </a>
+
+      <a class="card" href="https://github.com/NVIDIA/digital-biology-examples/tree/main/examples/resources" target="_blank" rel="noopener">
+        <div class="card-icon">⚙️</div>
+        <h3>Resources</h3>
+        <p>
+          GPU-accelerated single-cell analysis, protein binder design launchables,
+          and supplementary tools to accelerate your research.
+        </p>
+        <span class="card-arrow">Explore Resources ↗</span>
+      </a>
+    </div>
+  </section>
+
+  <hr class="divider" />
+
+  <!-- Disclaimer -->
+  <section style="padding-top:3rem; padding-bottom:4rem;">
+    <p class="section-label">Disclaimer</p>
+    <h2>Usage Notice</h2>
+    <div class="disclaimer">
+      These examples are provided for educational and demonstration purposes only.
+      They are offered as-is without any implied maintenance, support, or warranty.
+      Users are encouraged to adapt and maintain these examples for their own use cases.
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <p>
+      &copy; 2025 NVIDIA Corporation &nbsp;·&nbsp;
+      <a href="https://www.nvidia.com/en-us/about-nvidia/privacy-policy/" target="_blank" rel="noopener">Privacy Policy</a>
+      &nbsp;·&nbsp;
+      <a href="https://github.com/NVIDIA/digital-biology-examples" target="_blank" rel="noopener">GitHub</a>
+    </p>
+  </footer>
+
+</body>
+</html>

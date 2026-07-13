@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ISMB 2026 Workshop Setup — NVIDIA</title>
+<link rel="stylesheet" href="_ds/kaizen-ui-foundations-5919e993-0c25-47fe-9d3b-b24c0049b4d8/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/kaizen-ui-foundations-5919e993-0c25-47fe-9d3b-b24c0049b4d8/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/kaizen-ui-foundations-5919e993-0c25-47fe-9d3b-b24c0049b4d8/styles.css">
+<style>
+  html, body { margin: 0; padding: 0; }
+  body { font-family: var(--font-sans); background: var(--background-color-surface-sunken); }
+  a { color: var(--text-color-brand); text-decoration: none; }
+  a:hover { color: var(--text-color-brand); text-decoration: underline; }
+</style>
+</head>
+<body>
+
+  <!-- Top bar -->
+  <div style="width:100%; background:#000;">
+    <div style="max-width:920px; margin:0 auto; padding:18px 24px; display:flex; align-items:center; gap:16px;">
+      <img src="uploads/nvidia-logo-horiz-rgb-wht-no-reg-for-screen.png" alt="NVIDIA" style="height:32px; width:auto;">
+      <div style="width:1px; height:26px; background:rgba(255,255,255,0.25);"></div>
+      <span style="font-size: 15px; font-weight: 600; color: #FFFFFF">ISMB 2026 Workshop</span>
+    </div>
+  </div>
+
+  <div style="max-width:920px; margin:0 auto; padding:0 24px 96px;">
+
+    <!-- Hero -->
+    <header style="padding:64px 0 8px; text-align:center;">
+      <div style="font-size:13px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--text-color-brand); margin-bottom:16px;">Attendee Setup Guide</div>
+      <h1 style="margin:0; font-size:44px; line-height:1.08; font-weight:700; color:var(--text-color-primary); letter-spacing:-.015em;">Get ready for the labs</h1>
+      <p style="margin:20px auto 0; max-width:600px; font-size:18px; line-height:1.55; color:var(--text-color-secondary);">Three quick steps: create a Brev account, add your workshop credits, and launch the hands-on labs. This takes about five minutes.</p>
+    </header>
+
+    <div style="height:2px; width:120px; margin:44px auto 48px; background:var(--text-color-brand);"></div>
+
+    <!-- STEP 1 -->
+    <section style="background:var(--background-color-surface-base); border:1px solid var(--border-color-base); border-radius:var(--radius-xl); padding:36px 40px; box-shadow:var(--shadow-md); margin-bottom:28px;">
+      <div style="display:flex; align-items:flex-start; gap:22px;">
+        <div style="flex-shrink:0; width:44px; height:44px; border-radius:999px; background:var(--text-color-brand); color:#fff; font-size:20px; font-weight:700; display:flex; align-items:center; justify-content:center;">1</div>
+        <div style="flex:1; min-width:0;">
+          <div style="display:flex; align-items:center; gap:16px; margin-bottom:10px;">
+            <h2 style="margin:0; font-size:26px; font-weight:700; color:var(--text-color-primary);">Create your Brev account</h2>
+            <img src="uploads/m48-pc-web-mobile-256px-grn.png" alt="" style="height:52px; width:auto; margin-left:auto; flex-shrink:0;">
+          </div>
+          <p style="margin:0 0 24px; font-size:16px; line-height:1.6; color:var(--text-color-secondary);">Brev is the platform where you'll run every lab in this workshop. Open the Brev console and sign up (or sign in) with your email. It only takes a moment.</p>
+          <a href="https://brev.nvidia.com/" target="_blank" rel="noopener" style="display:inline-flex; align-items:center; justify-content:center; height:48px; padding:0 24px; border-radius:var(--radius-md); background:var(--text-color-brand); color:#fff; font-size:16px; font-weight:600; text-decoration:none;" onmouseover="this.style.filter='brightness(0.92)'" onmouseout="this.style.filter='none'">Sign up at brev.nvidia.com →</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- STEP 2 -->
+    <section style="background:var(--background-color-surface-base); border:1px solid var(--border-color-base); border-radius:var(--radius-xl); padding:36px 40px; box-shadow:var(--shadow-md); margin-bottom:28px;">
+      <div style="display:flex; align-items:flex-start; gap:22px;">
+        <div style="flex-shrink:0; width:44px; height:44px; border-radius:999px; background:var(--text-color-brand); color:#fff; font-size:20px; font-weight:700; display:flex; align-items:center; justify-content:center;">2</div>
+        <div style="flex:1; min-width:0;">
+          <h2 style="margin:0 0 10px; font-size:26px; font-weight:700; color:var(--text-color-primary);">Add your workshop credits</h2>
+          <p style="margin:0 0 22px; font-size:16px; line-height:1.6; color:var(--text-color-secondary);">Your labs run on GPU credits. Redeem the coupon code we provided so your account is funded before you launch anything.</p>
+
+          <ol style="margin:0 0 28px; padding-left:22px; display:flex; flex-direction:column; gap:12px; font-size:16px; line-height:1.55; color:var(--text-color-primary);">
+            <li>In the Brev console, open the <strong>Billing</strong> tab in the top navigation.</li>
+            <li>Under <strong>2. Credits</strong>, click <strong>Redeem Code</strong>.</li>
+            <li>Enter the code from your workshop handout (format <strong>ismb-2026-XXXXXX</strong>) and click <strong>Redeem</strong>. Your balance updates immediately.</li>
+          </ol>
+
+          <div style="background:var(--background-color-surface-sunken); border:1px dashed var(--border-color-base); border-radius:var(--radius-md); padding:14px 18px; margin-bottom:28px; display:flex; align-items:center; gap:12px; font-size:15px; color:var(--text-color-secondary);">
+            <span style="color:var(--text-color-brand); font-weight:700;">Tip</span>
+            <span>Don't have the code? Ask a workshop facilitator — it's printed on your handout.</span>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr; gap:24px;">
+            <figure style="margin:0;">
+              <div style="border:1px solid var(--border-color-base); border-radius:var(--radius-md); overflow:hidden; background:var(--background-color-surface-sunken);">
+                <img src="uploads/brev-coupon-1.png" alt="Open the Billing tab in the top navigation" style="width:100%; height:auto; display:block;">
+              </div>
+              <figcaption style="margin-top:10px; font-size:14px; color:var(--text-color-secondary);"><strong style="color:var(--text-color-primary);">Step 2a.</strong> Open the <strong>Billing</strong> tab in the top navigation.</figcaption>
+            </figure>
+            <figure style="margin:0;">
+              <div style="border:1px solid var(--border-color-base); border-radius:var(--radius-md); overflow:hidden; background:var(--background-color-surface-sunken);">
+                <img src="uploads/brev-coupon-2.png" alt="Click Redeem Code, enter your code, and click Redeem" style="width:100%; height:auto; display:block;">
+              </div>
+              <figcaption style="margin-top:10px; font-size:14px; color:var(--text-color-secondary);"><strong style="color:var(--text-color-primary);">Step 2b.</strong> Click <strong>Redeem Code</strong>, enter your code, and click <strong>Redeem</strong>.</figcaption>
+            </figure>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STEP 3 -->
+    <section style="background:var(--background-color-surface-base); border:1px solid var(--border-color-base); border-radius:var(--radius-xl); padding:36px 40px; box-shadow:var(--shadow-md);">
+      <div style="display:flex; align-items:flex-start; gap:22px;">
+        <div style="flex-shrink:0; width:44px; height:44px; border-radius:999px; background:var(--text-color-brand); color:#fff; font-size:20px; font-weight:700; display:flex; align-items:center; justify-content:center;">3</div>
+        <div style="flex:1; min-width:0;">
+          <div style="display:flex; align-items:center; gap:16px; margin-bottom:10px;">
+            <h2 style="margin:0; font-size:26px; font-weight:700; color:var(--text-color-primary);">Launch the labs</h2>
+            <img src="uploads/m48-science-beakers-256px-grn.png" alt="" style="height:52px; width:auto; margin-left:auto; flex-shrink:0;">
+          </div>
+          <p style="margin:0 0 26px; font-size:16px; line-height:1.6; color:var(--text-color-secondary);">Once your credits are added, launch each lab directly from the links below. Each opens a ready-to-run environment in Brev.</p>
+
+          <div style="display:flex; flex-direction:column; gap:16px;">
+            <div style="display:flex; align-items:center; gap:20px; flex-wrap:wrap; border:1px solid var(--border-color-base); border-radius:var(--radius-md); padding:22px 24px;">
+              <div style="flex:1; min-width:220px;">
+                <div style="font-size:13px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--text-color-brand); margin-bottom:6px;">Lab 1</div>
+                <div style="font-size:19px; font-weight:700; color:var(--text-color-primary);">Variant Effect Prediction</div>
+              </div>
+              <a href="https://brev.nvidia.com/launchable/deploy/now?launchableID=env-3GKGRP6IGXtwtZKJcnTzcvbzgkx" target="_blank" rel="noopener" style="display:inline-flex; align-items:center; justify-content:center; height:44px; padding:0 22px; border-radius:var(--radius-md); background:var(--text-color-brand); color:#fff; font-size:15px; font-weight:600; text-decoration:none; white-space:nowrap;" onmouseover="this.style.filter='brightness(0.92)'" onmouseout="this.style.filter='none'">Launch Lab 1 →</a>
+            </div>
+
+            <div style="display:flex; align-items:center; gap:20px; flex-wrap:wrap; border:1px solid var(--border-color-base); border-radius:var(--radius-md); padding:22px 24px;">
+              <div style="flex:1; min-width:220px;">
+                <div style="font-size:13px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--text-color-brand); margin-bottom:6px;">Lab 2</div>
+                <div style="font-size:19px; font-weight:700; color:var(--text-color-primary);">BioNeMo ProteinaComplexa Binder Design</div>
+              </div>
+              <a href="https://brev.nvidia.com/launchable/deploy/now?launchableID=env-3GFJZkBnuMJorl4nJ71j7oA5AdG" target="_blank" rel="noopener" style="display:inline-flex; align-items:center; justify-content:center; height:44px; padding:0 22px; border-radius:var(--radius-md); background:var(--text-color-brand); color:#fff; font-size:15px; font-weight:600; text-decoration:none; white-space:nowrap;" onmouseover="this.style.filter='brightness(0.92)'" onmouseout="this.style.filter='none'">Launch Lab 2 →</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STEP 4 -->
+    <section style="margin-top:28px; background:var(--background-color-surface-base); border:1px solid var(--border-color-base); border-radius:var(--radius-xl); padding:36px 40px; box-shadow:var(--shadow-md);">
+      <div style="display:flex; align-items:flex-start; gap:22px;">
+        <div style="flex-shrink:0; width:44px; height:44px; border-radius:999px; background:var(--text-color-brand); color:#fff; font-size:20px; font-weight:700; display:flex; align-items:center; justify-content:center;">4</div>
+        <div style="flex:1; min-width:0;">
+          <h2 style="margin:0 0 10px; font-size:26px; font-weight:700; color:var(--text-color-primary);">Clean up!</h2>
+          <div style="background:var(--background-color-accent-red-subtle, #fdecec); border:1px solid var(--border-color-accent-red, #f0b7b7); border-radius:var(--radius-md); padding:16px 20px; margin-bottom:22px; display:flex; align-items:flex-start; gap:12px;">
+            <span style="color:#d1344a; font-weight:700; font-size:15px; flex-shrink:0;">Important</span>
+            <span style="font-size:15px; line-height:1.55; color:var(--text-color-primary);">When you're done, <strong>delete your instances</strong>. If you only stop them, they will <strong>continue to accrue charges</strong>.</span>
+          </div>
+          <p style="margin:0 0 22px; font-size:16px; line-height:1.6; color:var(--text-color-secondary);">In the Brev console, open each instance you launched and click <strong>Delete</strong> — not just Stop. Repeat for every lab environment you started.</p>
+          <div style="border:1px solid var(--border-color-base); border-radius:var(--radius-md); overflow:hidden; background:var(--background-color-surface-sunken); max-width:360px;">
+            <img src="uploads/brev-delete.png" alt="Delete button in Brev console" style="width:100%; height:auto; display:block;">
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- WHAT'S NEXT -->
+    <section style="margin-top:28px; background:var(--background-color-surface-base); border:1px solid var(--border-color-base); border-radius:var(--radius-xl); padding:36px 40px; box-shadow:var(--shadow-md);">
+      <h2 style="margin:0 0 8px; font-size:26px; font-weight:700; color:var(--text-color-primary);">What's next</h2>
+      <p style="margin:0 0 26px; font-size:16px; line-height:1.6; color:var(--text-color-secondary);">Keep building after the workshop. These open-source NVIDIA blueprints and toolkits are a great place to go deeper.</p>
+
+      <div style="display:flex; flex-direction:column; gap:14px;">
+        <div style="border:1px solid var(--border-color-base); border-radius:var(--radius-md); padding:20px 22px;">
+          <div style="font-size:13px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--text-color-brand); margin-bottom:8px;">Agent skills and tools</div>
+          <div style="font-size:18px; font-weight:700; color:var(--text-color-primary); margin-bottom:14px;">BioNeMo Agent Toolkit</div>
+          <div style="display:flex; gap:14px; flex-wrap:wrap;">
+            <a href="https://developer.nvidia.com/blog/build-an-ai-scientist-for-life-science-discovery-with-nvidia-bionemo-agent-toolkit/" target="_blank" rel="noopener" style="display:inline-flex; align-items:center; height:40px; padding:0 18px; border-radius:var(--radius-md); background:var(--text-color-brand); color:#fff; font-size:14px; font-weight:600; text-decoration:none;" onmouseover="this.style.filter='brightness(0.92)'" onmouseout="this.style.filter='none'">Blog Post →</a>
+            <a href="https://github.com/NVIDIA-BioNeMo/bionemo-agent-toolkit" target="_blank" rel="noopener" style="display:inline-flex; align-items:center; height:40px; padding:0 18px; border-radius:var(--radius-md); border:1px solid var(--border-color-base); color:var(--text-color-primary); font-size:14px; font-weight:600; text-decoration:none;" onmouseover="this.style.borderColor='var(--text-color-brand)'" onmouseout="this.style.borderColor='var(--border-color-base)'">GitHub Repo →</a>
+          </div>
+        </div>
+
+        <div style="border:1px solid var(--border-color-base); border-radius:var(--radius-md); padding:20px 22px;">
+          <div style="font-size:13px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--text-color-brand); margin-bottom:8px;">Genomics AI Blueprint</div>
+          <div style="font-size:18px; font-weight:700; color:var(--text-color-primary); margin-bottom:14px;">Genomics Analysis with Parabricks</div>
+          <div style="display:flex; gap:14px; flex-wrap:wrap;">
+            <a href="https://docs.nvidia.com/clara/parabricks" target="_blank" rel="noopener" style="display:inline-flex; align-items:center; height:40px; padding:0 18px; border-radius:var(--radius-md); background:var(--text-color-brand); color:#fff; font-size:14px; font-weight:600; text-decoration:none;" onmouseover="this.style.filter='brightness(0.92)'" onmouseout="this.style.filter='none'">Parabricks Docs →</a>
+            <a href="https://github.com/NVIDIA-AI-Blueprints/genomics-analysis/tree/main" target="_blank" rel="noopener" style="display:inline-flex; align-items:center; height:40px; padding:0 18px; border-radius:var(--radius-md); border:1px solid var(--border-color-base); color:var(--text-color-primary); font-size:14px; font-weight:600; text-decoration:none;" onmouseover="this.style.borderColor='var(--text-color-brand)'" onmouseout="this.style.borderColor='var(--border-color-base)'">GitHub Repo →</a>
+          </div>
+        </div>
+
+        <div style="border:1px solid var(--border-color-base); border-radius:var(--radius-md); padding:20px 22px;">
+          <div style="font-size:13px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--text-color-brand); margin-bottom:8px;">Single Cell Analysis AI Blueprint</div>
+          <div style="font-size:18px; font-weight:700; color:var(--text-color-primary); margin-bottom:14px;">Single-Cell Analysis with RAPIDS Single Cell</div>
+          <div style="display:flex; gap:14px; flex-wrap:wrap;">
+            <a href="https://rapids-singlecell.readthedocs.io/en/latest/" target="_blank" rel="noopener" style="display:inline-flex; align-items:center; height:40px; padding:0 18px; border-radius:var(--radius-md); background:var(--text-color-brand); color:#fff; font-size:14px; font-weight:600; text-decoration:none;" onmouseover="this.style.filter='brightness(0.92)'" onmouseout="this.style.filter='none'">RAPIDS Single Cell Docs →</a>
+            <a href="https://github.com/NVIDIA-AI-Blueprints/single-cell-analysis-blueprint" target="_blank" rel="noopener" style="display:inline-flex; align-items:center; height:40px; padding:0 18px; border-radius:var(--radius-md); border:1px solid var(--border-color-base); color:var(--text-color-primary); font-size:14px; font-weight:600; text-decoration:none;" onmouseover="this.style.borderColor='var(--text-color-brand)'" onmouseout="this.style.borderColor='var(--border-color-base)'">GitHub Repo →</a>
+          </div>
+        </div>
+
+        <div style="border:1px solid var(--border-color-base); border-radius:var(--radius-md); padding:20px 22px;">
+          <div style="font-size:13px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--text-color-brand); margin-bottom:8px;">Publication DATA, MODELS, and TOOLS</div>
+          <div style="font-size:18px; font-weight:700; color:var(--text-color-primary); margin-bottom:14px;">NVIDIA BioNeMo GitHub Organization</div>
+          <div style="display:flex; gap:14px; flex-wrap:wrap;">
+            <a href="https://github.com/NVIDIA-BioNeMo" target="_blank" rel="noopener" style="display:inline-flex; align-items:center; height:40px; padding:0 18px; border-radius:var(--radius-md); border:1px solid var(--border-color-base); color:var(--text-color-primary); font-size:14px; font-weight:600; text-decoration:none;" onmouseover="this.style.borderColor='var(--text-color-brand)'" onmouseout="this.style.borderColor='var(--border-color-base)'">GitHub Org →</a>
+          </div>
+        </div>
+
+        <div style="border:1px solid var(--border-color-base); border-radius:var(--radius-md); padding:20px 22px;">
+          <div style="font-size:13px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--text-color-brand); margin-bottom:8px;">Recipes</div>
+          <div style="font-size:18px; font-weight:700; color:var(--text-color-primary); margin-bottom:14px;">NVIDIA BioNeMo Recipes</div>
+          <div style="display:flex; gap:14px; flex-wrap:wrap;">
+            <a href="https://docs.nvidia.com/bionemo-framework/latest/main/recipes/" target="_blank" rel="noopener" style="display:inline-flex; align-items:center; height:40px; padding:0 18px; border-radius:var(--radius-md); background:var(--text-color-brand); color:#fff; font-size:14px; font-weight:600; text-decoration:none;" onmouseover="this.style.filter='brightness(0.92)'" onmouseout="this.style.filter='none'">BioNeMo Recipes Docs →</a>
+            <a href="https://github.com/NVIDIA-BioNeMo/bionemo-recipes" target="_blank" rel="noopener" style="display:inline-flex; align-items:center; height:40px; padding:0 18px; border-radius:var(--radius-md); border:1px solid var(--border-color-base); color:var(--text-color-primary); font-size:14px; font-weight:600; text-decoration:none;" onmouseover="this.style.borderColor='var(--text-color-brand)'" onmouseout="this.style.borderColor='var(--border-color-base)'">GitHub Repo →</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer style="margin-top:48px; text-align:center; font-size:14px; color:var(--text-color-secondary);">
+      Need help? Flag down a workshop facilitator — we're here to get you running.
+    </footer>
+
+  </div>
+
+</body>
+</html>
