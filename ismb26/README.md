@@ -61,6 +61,9 @@ Keep building after the workshop. These open-source NVIDIA blueprints and toolki
 - [RAPIDS Single Cell Docs](https://rapids-singlecell.readthedocs.io/en/latest/)
 - [GitHub Repo](https://github.com/NVIDIA-AI-Blueprints/single-cell-analysis-blueprint)
 
+### Protein binder lab 
+- [Lab 2 source repo](https://github.com/NVIDIA/digital-biology-examples)
+
 ### Publication Data, Models, and Tools — NVIDIA BioNeMo GitHub Organization
 - [GitHub Org](https://github.com/NVIDIA-BioNeMo)
 
