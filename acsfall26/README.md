@@ -14,6 +14,30 @@ focus on the chemistry and the scientific limits of the results.
 - Hosted inference can be rate-limited. If a request reports an error, take a
   screenshot and continue with another optional activity.
 
+## Step 1 — Create your Brev account
+
+Brev is the platform where you'll run every lab in this workshop. Open the
+Brev console and sign up (or sign in) with your email.
+
+👉 [**Sign up at brev.nvidia.com**](https://brev.nvidia.com/)
+
+---
+
+## Step 2 — Add your workshop credits
+
+Your labs run on GPU credits. Redeem the coupon code we provided so your
+account is funded before you launch anything.
+
+1. In the Brev console, open the **Billing** tab in the top navigation.
+2. Under **2. Credits**, click **Redeem Code**.
+3. Enter the code from your workshop handout (format `acs-bat-XXXXXX`) and
+   click **Redeem**. Your balance updates immediately.
+
+> **Tip:** Don't have the code? Ask a workshop facilitator — it's printed on
+> your handout.
+
+---
+
 ## Choose either journey
 
 Both journeys are optional and independent. You can do either one, both, or
