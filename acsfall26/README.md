@@ -38,7 +38,7 @@ account is funded before you launch anything.
 
 ---
 
-## Choose either journey
+## Step 3 — Deploy the Launchables
 
 Both journeys are optional and independent. You can do either one, both, or
 neither.
