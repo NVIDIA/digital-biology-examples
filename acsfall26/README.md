@@ -67,7 +67,7 @@ error, take a screenshot and continue with another optional activity.
 
 <!-- ACS_PROMPT:01-data-and-representation:BEGIN -->
 ~~~text
-Use the preinstalled ACS workshop workflow to inspect the fixed molecule library and explain how the molecules are represented for comparison. Run this workshop step once. Clearly distinguish RDKit work on the CPU from nvMolKit fingerprint generation on the GPU. Explain the measured result and its scientific limits, then show the result image and provide the workshop download. If this step has already completed in this chat, show the existing result without running it again.
+Inspect the fixed molecule library and explain how the molecules are represented for comparison. Run this analysis once. Clearly distinguish RDKit work on the CPU from nvMolKit fingerprint generation on the GPU. Explain the measured result and its scientific limits, then show the result image and provide the results download. If this analysis has already completed in this chat, show the existing result without running it again.
 ~~~
 <!-- ACS_PROMPT:01-data-and-representation:END -->
 
@@ -75,7 +75,7 @@ Use the preinstalled ACS workshop workflow to inspect the fixed molecule library
 
 <!-- ACS_PROMPT:02-relationships-and-groups:BEGIN -->
 ~~~text
-Use the preinstalled ACS workshop workflow to find structurally similar molecules and group them using the fixed Butina rule. Run this workshop step once. Clearly distinguish GPU fingerprint and similarity calculations from CPU clustering. Explain what the groups mean, what they do not prove, and how the fingerprint and distance cutoff affect the result. Show the result image and provide the updated workshop download. If this step has already completed, show the existing result without running it again.
+Find structurally similar molecules and group them using the fixed Butina rule. Run this analysis once. Clearly distinguish GPU fingerprint and similarity calculations from CPU clustering. Explain what the groups mean, what they do not prove, and how the fingerprint and distance cutoff affect the result. Show the result image and provide the updated results download. If this analysis has already completed, show the existing result without running it again.
 ~~~
 <!-- ACS_PROMPT:02-relationships-and-groups:END -->
 
@@ -83,7 +83,7 @@ Use the preinstalled ACS workshop workflow to find structurally similar molecule
 
 <!-- ACS_PROMPT:03-sampled-3d-geometry:BEGIN -->
 ~~~text
-Use the preinstalled ACS workshop workflow to generate and optimize the bounded set of sampled 3D conformers. Run this workshop step once. Explain which work ran on the GPU, what convergence and MMFF94 energy mean, and why these sampled conformers are not experimental structures. Show the result image and provide the updated workshop download. If this step has already completed, show the existing result without running it again.
+Generate and optimize the defined set of sampled 3D conformers. Run this analysis once. Explain which work ran on the GPU, what convergence and MMFF94 energy mean, and why these sampled conformers are not experimental structures. Show the result image and provide the updated results download. If this analysis has already completed, show the existing result without running it again.
 ~~~
 <!-- ACS_PROMPT:03-sampled-3d-geometry:END -->
 
@@ -91,7 +91,7 @@ Use the preinstalled ACS workshop workflow to generate and optimize the bounded 
 
 <!-- ACS_PROMPT:04-objective:BEGIN -->
 ~~~text
-Use the preinstalled bounded workshop objective to improve the weakest-link structural diversity of the fixed four-molecule panel. Choose only permitted changes with the best predicted minimum pairwise Tanimoto distance, and stop when the objective finishes. Explain the starting panel, limiting pair, accepted changes, final result, and change in `D_min`. Make clear that this is a bounded descriptor exercise, not autonomous molecular design or evidence of biological performance. Show the final image and provide the complete workshop download. If the objective has already completed, show the existing result without running it again.
+Within the permitted candidate set, improve the weakest-link structural diversity of the fixed four-molecule panel. Run this analysis once. Choose only permitted changes with the best predicted minimum pairwise Tanimoto distance, and stop when the objective finishes. Explain the starting panel, limiting pair, accepted changes, final result, and change in `D_min`. Make clear that this is a bounded descriptor exercise, not autonomous molecular design or evidence of biological performance. Show the final image and provide the complete results download. If this analysis has already completed, show the existing result without running it again.
 ~~~
 <!-- ACS_PROMPT:04-objective:END -->
 
