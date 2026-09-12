@@ -1,6 +1,54 @@
+# 0.6.0 — 2026-09-11
+
+- Target NIM 1.9.0: diffusion concurrency and affinity embeddings.
+- Correct PAE/PDE documentation to server-side NPZ artifacts.
+- Reject unknown/malformed request fields; accept protein X residues.
+- Fix YAML affinity conversion and missing-MSA handling.
+- Bound hosted polling, preserve HTTP errors, choose hosted URL automatically.
+- Save complete responses, all scores, and affinity embeddings.
+- Refresh notebooks, deployment instructions, examples and release validation.
+- Consolidate seven notebooks into five numbered workflows, fold A3M pairing
+  into protein complexes, and move the SageMaker connection example into docs.
+  Show actual NIM/client versions, restore the mature barstar sequence, correct
+  DNA strand complementarity, and validate supplied MSA query sequences.
+- Require Python 3.10+; make visualization an optional notebook extra.
+- Forward NIM parameters through async/sync multi-endpoint methods.
+- Return a nonzero CLI status when compound screening fails; report unsupported hosted readiness/metadata calls explicitly.
+- Consolidate duplicate examples and guides; validate actual notebook kernels, viewers, Python methods and Bash CLI workflows.
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
+
+## [0.5.2.post1] - 2026-02-24
+
+PEP 440 post-release patch on top of `0.5.2`. **No public API changes**;
+fixes a long-standing packaging defect that has been present since
+`0.5.0` (and was carried into `0.5.2` unchanged). Users on a clean
+environment should upgrade to `0.5.2.post1`; users who already have
+`pandas` installed will see no behavior difference.
+
+### Fixed — packaging
+- **`import boltz2_client` now works on a clean install.** Previously
+  `boltz2_client/virtual_screening.py` did `import pandas as pd` at
+  module top, but `pandas` is only declared in the `[dev]` extra (not a
+  runtime dependency), so any clean `pip install boltz2-python-client`
+  followed by `import boltz2_client` raised
+  `ModuleNotFoundError: No module named 'pandas'`. The pandas import is
+  now deferred into the four methods that actually need it
+  (`CompoundLibrary.from_csv`, `VirtualScreeningResult.to_dataframe`,
+  `VirtualScreeningResult.get_top_hits`,
+  `VirtualScreeningResult.get_statistics_by_group`); calling any of those
+  methods still requires pandas, but importing the package, the CLI,
+  and every other code path no longer does. Callers who use the virtual
+  screening DataFrame helpers should install with
+  `pip install "boltz2-python-client[dev]"` or add `pandas` to their
+  own environment.
+- A `from __future__ import annotations` was added to
+  `virtual_screening.py` so the `pd.DataFrame` return-type annotations
+  on those methods are evaluated lazily and do not require `pandas` at
+  import time. Static type checkers and IDEs continue to resolve the
+  annotations via a `TYPE_CHECKING` block.
 
 ## [0.5.2] - 2026-02-24
 

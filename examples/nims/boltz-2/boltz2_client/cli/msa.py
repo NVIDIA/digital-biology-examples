@@ -559,9 +559,9 @@ def convert_msa_command(ctx, a3m_files: Tuple[str, ...], chain_ids: str,
 @click.option('--diffusion-samples', type=click.IntRange(1, 25), default=1,
               help='Number of diffusion samples/structures (1-25, default: 1)')
 @click.option('--write-full-pae', is_flag=True, default=False,
-              help='Output full PAE (Predicted Aligned Error) matrix')
+              help='Write PAE NPZ files on the NIM 1.9+ server')
 @click.option('--write-full-pde', is_flag=True, default=False,
-              help='Output full PDE (Predicted Distance Error) matrix')
+              help='Write PDE NPZ files on the NIM 1.9+ server')
 @click.option('--output-format', type=click.Choice(['cif', 'pdb']), default='cif',
               help='Output structure format: cif (default) or pdb')
 @click.pass_context
@@ -825,7 +825,10 @@ def multimer_msa_command(ctx, a3m_files: Tuple[str, ...], chain_ids: str,
                 if response.ptm_scores:
                     print_info(f"pTM: {response.ptm_scores[0]:.4f}")
             
-            # Save PAE matrix if available
+            if write_full_pae or write_full_pde:
+                print_info("NIM 1.9+ matrix files are under server NIM_OUTPUT_PATH; JSON pae/pde fields are null.")
+
+            # Save legacy inline PAE matrix if available
             if write_full_pae and response.pae:
                 pae_path = output_path.with_suffix('.pae.json')
                 pae_path.write_text(json.dumps({'pae': response.pae}, indent=2))

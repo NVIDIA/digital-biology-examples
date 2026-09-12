@@ -28,18 +28,7 @@ def health(ctx):
         try:
             # Handle NVIDIA hosted endpoints specially
             if ctx.obj['endpoint_type'] == 'nvidia_hosted':
-                print_warning("Health checks are not supported on NVIDIA hosted endpoints")
-                print_info("NVIDIA hosted endpoints use managed infrastructure with built-in health monitoring")
-                print_success("NVIDIA endpoint is considered healthy if you can make predictions")
-                
-                if ctx.obj['verbose']:
-                    console.print("\nService Info:", style="bold")
-                    console.print(f"  Base URL: {ctx.obj['base_url']}")
-                    console.print(f"  Endpoint Type: {ctx.obj['endpoint_type']}")
-                    console.print(f"  API Key: {'✅ Set via environment' if ctx.obj.get('api_key') is None else '✅ Provided via CLI'}")
-                    console.print(f"  Note: To verify connectivity, try running a prediction command")
-                    
-                print_info("To test connectivity, try: boltz2 --endpoint-type nvidia_hosted protein \"SEQUENCE\" --no-save")
+                raise click.ClickException("NVIDIA hosted inference has no readiness API; verify availability with a prediction.")
             else:
                 # Local endpoint - use normal health check
                 client = create_client(ctx)
@@ -64,11 +53,12 @@ def health(ctx):
                         for key, value in health_status.details.items():
                             console.print(f"  {key}: {value}")
                         
+        except click.ClickException:
+            raise
         except Exception as e:
-            if ctx.obj['endpoint_type'] not in ('nvidia_hosted',):
-                print_error(f"Health check failed: {e}")
-                raise click.Abort()
-    
+            print_error(f"Health check failed: {e}")
+            raise click.Abort()
+
     asyncio.run(check_health())
 
 

@@ -20,6 +20,7 @@ from typing import Dict, List, Optional, Union, Any, Tuple, Callable
 import os
 
 import httpx
+from pydantic import ValidationError
 import yaml
 from rich.console import Console
 
@@ -30,7 +31,7 @@ from .models import (
 )
 from .exceptions import (
     Boltz2ClientError, Boltz2APIError, Boltz2ValidationError, 
-    Boltz2TimeoutError, Boltz2ConnectionError
+    Boltz2TimeoutError, Boltz2ConnectionError, Boltz2InvalidResponseError
 )
 from .msa_search import (
     MSASearchClient, MSASearchIntegration, MSASearchRequest,
@@ -55,7 +56,7 @@ class Boltz2Client:
 
     def __init__(
         self,
-        base_url: str = "http://localhost:8000",
+        base_url: Optional[str] = None,
         api_key: Optional[str] = None,
         endpoint_type: str = EndpointType.LOCAL,
         timeout: float = 300.0,
@@ -84,7 +85,12 @@ class Boltz2Client:
             sagemaker_endpoint_name: SageMaker endpoint name (required when endpoint_type="sagemaker")
             sagemaker_region: AWS region for SageMaker (default: from AWS config/env)
         """
-        self.base_url = base_url.rstrip('/')
+        if endpoint_type not in (EndpointType.LOCAL, EndpointType.NVIDIA_HOSTED, EndpointType.SAGEMAKER):
+            raise Boltz2ValidationError(f"Unknown endpoint type: {endpoint_type}")
+        if timeout <= 0 or poll_seconds <= 0:
+            raise Boltz2ValidationError("timeout and poll_seconds must be positive")
+        default_url = "https://health.api.nvidia.com" if endpoint_type == EndpointType.NVIDIA_HOSTED else "http://localhost:8000"
+        self.base_url = (base_url or default_url).rstrip('/')
         self.endpoint_type = endpoint_type
         self.timeout = timeout
         self.max_retries = max_retries
@@ -94,11 +100,11 @@ class Boltz2Client:
         
         # Handle API key for NVIDIA hosted endpoints
         if endpoint_type == EndpointType.NVIDIA_HOSTED:
-            self.api_key = api_key or os.getenv("NVIDIA_API_KEY")
+            self.api_key = api_key or os.getenv("NVIDIA_API_KEY") or os.getenv("NGC_API_KEY")
             if not self.api_key:
                 raise Boltz2ValidationError(
                     "API key is required for NVIDIA hosted endpoints. "
-                    "Provide it via api_key parameter or NVIDIA_API_KEY environment variable."
+                    "Provide it via api_key, NVIDIA_API_KEY, or NGC_API_KEY."
                 )
         else:
             self.api_key = None
@@ -183,28 +189,59 @@ class Boltz2Client:
             
         headers = self._get_headers()
         
+        deadline = time.monotonic() + self.timeout
         while True:
-            await asyncio.sleep(self.poll_seconds)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise Boltz2TimeoutError("Hosted prediction polling timed out", timeout_seconds=self.timeout)
+            await asyncio.sleep(min(self.poll_seconds, remaining))
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise Boltz2TimeoutError("Hosted prediction polling timed out", timeout_seconds=self.timeout)
             
             status_response = await client.get(
                 self.status_url.format(task_id=task_id),
                 headers=headers,
-                timeout=self.timeout
+                timeout=remaining
             )
             
             if status_response.status_code == 200:
                 if progress_callback:
                     progress_callback("Task completed successfully")
                 return status_response
-            elif status_response.status_code in [400, 401, 404, 422, 500]:
-                error_detail = status_response.text
-                raise Boltz2APIError(f"Task failed with status {status_response.status_code}: {error_detail}")
+            elif status_response.status_code != 202:
+                self._raise_api_error(status_response)
             
             if progress_callback:
                 progress_callback(f"Task still processing... (status: {status_response.status_code})")
 
+    @staticmethod
+    def _raise_api_error(response: httpx.Response) -> None:
+        """Preserve NIM JSON errors and HTTP status for callers."""
+        try:
+            data = response.json()
+        except ValueError:
+            data = {"text": response.text}
+        if not isinstance(data, dict):
+            data = {"detail": data}
+        message = data.get("error") or data.get("detail") or response.text
+        raise Boltz2APIError(
+            f"Prediction failed: {message}",
+            status_code=response.status_code,
+            response_data=data,
+        )
+
+    @staticmethod
+    def _parse_prediction_response(data: dict) -> PredictionResponse:
+        try:
+            return PredictionResponse.model_validate(data)
+        except ValidationError as exc:
+            raise Boltz2InvalidResponseError(f"Invalid prediction response: {exc}") from exc
+
     async def health_check(self) -> HealthStatus:
         """Check the health status of the Boltz-2 service."""
+        if self.endpoint_type == EndpointType.NVIDIA_HOSTED:
+            raise NotImplementedError("NVIDIA hosted inference has no readiness API; verify availability with a prediction.")
         if self.endpoint_type == EndpointType.SAGEMAKER:
             return await self._sagemaker_health_check()
         try:
@@ -271,6 +308,8 @@ class Boltz2Client:
 
     async def get_service_metadata(self) -> ServiceMetadata:
         """Get service metadata and model information."""
+        if self.endpoint_type != EndpointType.LOCAL:
+            raise NotImplementedError("Service metadata is available only for local NIM endpoints.")
         try:
             headers = self._get_headers()
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -286,7 +325,8 @@ class Boltz2Client:
         request: PredictionRequest,
         save_structures: bool = True,
         output_dir: Optional[Path] = None,
-        progress_callback: Optional[Callable] = None
+        progress_callback: Optional[Callable] = None,
+        **request_parameters,
     ) -> PredictionResponse:
         """
         Make a structure prediction request with comprehensive parameter support.
@@ -304,7 +344,15 @@ class Boltz2Client:
             output_dir = Path.cwd()
         
         try:
+            # Revalidate nested models as callers may mutate lists after construction.
+            request_data = request.model_dump(exclude_none=True)
+            request_data.update(request_parameters)
+            request = PredictionRequest.model_validate(request_data)
             request_dict = request.model_dump(exclude_none=True)
+            # Older hosted deployments reject the embedding flag even when false.
+            for ligand in request_dict.get("ligands", []):
+                if not ligand.get("output_affinity_embedding"):
+                    ligand.pop("output_affinity_embedding", None)
 
             if self.endpoint_type == EndpointType.SAGEMAKER:
                 start_time = time.time()
@@ -315,7 +363,7 @@ class Boltz2Client:
                 if progress_callback:
                     progress_callback(f"Prediction completed in {prediction_time:.2f}s")
 
-                prediction_response = PredictionResponse(**response_data)
+                prediction_response = self._parse_prediction_response(response_data)
                 if save_structures:
                     await self._save_structures(prediction_response, output_dir, progress_callback)
                 return prediction_response
@@ -338,8 +386,7 @@ class Boltz2Client:
                     response = await self._handle_nvidia_polling(client, response, progress_callback)
                 
                 if response.status_code != 200:
-                    error_detail = response.text
-                    raise Boltz2APIError(f"Prediction failed: {response.status_code} - {error_detail}")
+                    self._raise_api_error(response)
                 
                 end_time = time.time()
                 prediction_time = end_time - start_time
@@ -349,7 +396,7 @@ class Boltz2Client:
                 
                 # Parse response
                 response_data = response.json()
-                prediction_response = PredictionResponse(**response_data)
+                prediction_response = self._parse_prediction_response(response_data)
                 
                 # Save structures if requested
                 if save_structures:
@@ -357,6 +404,8 @@ class Boltz2Client:
                 
                 return prediction_response
                 
+        except ValidationError as e:
+            raise Boltz2ValidationError(str(e)) from e
         except httpx.TimeoutException:
             raise Boltz2TimeoutError(f"Request timed out after {self.timeout} seconds")
         except httpx.RequestError as e:
@@ -456,6 +505,7 @@ class Boltz2Client:
         affinity_mw_correction: Optional[bool] = None,
         msa_files: Optional[List[Tuple[str, AlignmentFormat]]] = None,
         msa: Optional[Dict[str, Dict[str, AlignmentFileRecord]]] = None,
+        output_affinity_embedding: bool = False,
         **kwargs
     ) -> PredictionResponse:
         """
@@ -476,6 +526,7 @@ class Boltz2Client:
             affinity_mw_correction: Apply molecular weight correction to affinity
             msa_files: List of (file_path, format) tuples for MSA files
             msa: Pre-constructed MSA dictionary {database_name: {format: AlignmentFileRecord}}
+            output_affinity_embedding: Include affinity embeddings (NIM 1.8+)
             **kwargs: Additional parameters for predict()
             
         Returns:
@@ -518,7 +569,8 @@ class Boltz2Client:
             id=ligand_id,
             smiles=ligand_smiles,
             ccd=ligand_ccd,
-            predict_affinity=predict_affinity
+            predict_affinity=predict_affinity,
+            output_affinity_embedding=output_affinity_embedding,
         )
         
         constraints = []
@@ -778,6 +830,7 @@ class Boltz2Client:
         sampling_steps_affinity: int = 200,
         diffusion_samples_affinity: int = 5,
         affinity_mw_correction: bool = False,
+        max_parallel_samples: Optional[int] = None,
         **kwargs
     ) -> PredictionResponse:
         """
@@ -793,8 +846,9 @@ class Boltz2Client:
             step_scale: Step scale for diffusion sampling (0.5-5.0)
             without_potentials: Whether to run without potentials
             concatenate_msas: Whether to concatenate MSAs
-            write_full_pae: Whether to return full PAE matrix in response
-            write_full_pde: Whether to return full PDE matrix in response
+            write_full_pae: Write full PAE matrices on the NIM server (1.9+)
+            write_full_pde: Write full PDE matrices on the NIM server (1.9+)
+            max_parallel_samples: Concurrent diffusion samples (NIM 1.9+, 1-25)
             sampling_steps_affinity: Sampling steps for affinity prediction (10-1000)
             diffusion_samples_affinity: Diffusion samples for affinity prediction (1-10)
             affinity_mw_correction: Enable molecular weight correction for affinity
@@ -815,6 +869,7 @@ class Boltz2Client:
             concatenate_msas=concatenate_msas,
             write_full_pae=write_full_pae,
             write_full_pde=write_full_pde,
+            max_parallel_samples=max_parallel_samples,
             sampling_steps_affinity=sampling_steps_affinity,
             diffusion_samples_affinity=diffusion_samples_affinity,
             affinity_mw_correction=affinity_mw_correction,
@@ -840,7 +895,7 @@ class Boltz2Client:
         """
         Predict structure from YAML configuration file (official Boltz format).
         
-        This method supports the official Boltz YAML configuration format as used
+        This method supports the supported Boltz YAML configuration subset as used
         in the original Boltz repository examples.
         
         Args:
@@ -879,8 +934,8 @@ class Boltz2Client:
             config = yaml_config
         else:
             if isinstance(yaml_config, (str, Path)):
-                yaml_path = Path(yaml_config)
-                if yaml_path.exists():
+                yaml_path = Path(yaml_config) if isinstance(yaml_config, Path) or "\n" not in yaml_config else None
+                if yaml_path is not None and yaml_path.exists():
                     # Load from file
                     yaml_content = yaml_path.read_text()
                     yaml_data = yaml.safe_load(yaml_content)
@@ -941,7 +996,7 @@ class Boltz2Client:
                     if polymer_idx < len(request.polymers):
                         request.polymers[polymer_idx].msa = {"default": {format_type: msa_record}}
                 else:
-                    self.console.print(f"⚠️ MSA file not found: {msa_path}", style="yellow")
+                    raise Boltz2ValidationError(f"MSA file not found: {msa_path}")
         
         return await self.predict(
             request, 
@@ -1103,7 +1158,6 @@ class Boltz2Client:
             databases=databases,
             e_value=e_value,
             max_msa_sequences=max_msa_sequences,
-            **kwargs
         )
         
         # Count sequences in alignment
@@ -1243,7 +1297,6 @@ class Boltz2Client:
             databases=databases,
             e_value=e_value,
             max_msa_sequences=max_msa_sequences,
-            **kwargs
         )
         
         # Count sequences in alignment
@@ -1394,6 +1447,7 @@ class Boltz2Client:
         progress_callback: Optional[Callable] = None
     ) -> List[Path]:
         """Save prediction structures to files."""
+        output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         saved_files = []
         
@@ -1411,15 +1465,16 @@ class Boltz2Client:
                 progress_callback(f"Saved structure to {structure_file}")
         
         # Save metadata
-        metadata = {
-            "confidence_scores": response.confidence_scores,
-            "metrics": response.metrics,
-            "timestamp": datetime.now().isoformat()
-        }
+        metadata = response.model_dump(mode="json", exclude={"structures"})
+        metadata["timestamp"] = datetime.now().isoformat()
         
         metadata_file = output_dir / "prediction_metadata.json"
         metadata_file.write_text(json.dumps(metadata, indent=2))
         saved_files.append(metadata_file)
+
+        response_file = output_dir / "prediction_response.json"
+        response_file.write_text(response.model_dump_json(indent=2), encoding="utf-8")
+        saved_files.append(response_file)
         
         # Save affinities if present
         if getattr(response, "affinities", None):
@@ -1449,7 +1504,7 @@ class Boltz2SyncClient:
     
     def __init__(
         self,
-        base_url: str = "http://localhost:8000",
+        base_url: Optional[str] = None,
         api_key: Optional[str] = None,
         endpoint_type: str = EndpointType.LOCAL,
         timeout: float = 300.0,
@@ -1734,4 +1789,4 @@ async def predict_covalent(
         ligand_ccd=ligand_ccd,
         covalent_bonds=covalent_bonds,
         **kwargs
-    ) 
+    )

@@ -1,0 +1,822 @@
+{
+  "$defs": {
+    "AlignmentFileRecord": {
+      "description": "Represents a single alignment.\nThis is just the raw file output read into a string\nand of a defined version.",
+      "properties": {
+        "alignment": {
+          "description": "The contents of a single MSA.",
+          "minLength": 0,
+          "title": "Multiple Sequence Alignment.",
+          "tooltip": "The contents of a single MSA.",
+          "type": "string"
+        },
+        "format": {
+          "description": "The format of the alignment record(s). Must be one of: csv, a3m, fasta, or sto (case-sensitive).",
+          "minLength": 1,
+          "title": "Alignment Format",
+          "tooltip": "Supported formats: csv, a3m, fasta, sto (must be lowercase)",
+          "type": "string"
+        },
+        "rank": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": -1,
+          "description": "An integer rank to define the ordering of alignments (for example, when concatenating alignments).",
+          "title": "Rank",
+          "tooltip": "An integer rank."
+        }
+      },
+      "required": [
+        "alignment",
+        "format"
+      ],
+      "title": "AlignmentFileRecord",
+      "type": "object"
+    },
+    "Atom": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 4,
+              "minLength": 1,
+              "pattern": "^([A-Z]+|[A-Za-z0-9]{4})$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Unique identifier for the polymer chain. Can be either a single letter (A-Z) or a PDB-style ID (4 alphanumeric characters)",
+          "examples": [
+            "A",
+            "1ABC"
+          ],
+          "title": "Id",
+          "tooltip": "The ID of the target chain, which should be an alphanumeric ID of <=4 characters."
+        },
+        "residue_index": {
+          "description": "The one-based index of the atom in the polymer chain.",
+          "examples": [
+            1,
+            150
+          ],
+          "exclusiveMinimum": 0,
+          "title": "Residue Index",
+          "tooltip": "Describes the index of the amino acid or nucleic acid residue in the target chain.",
+          "type": "integer"
+        },
+        "atom_name": {
+          "description": "A name for the atom.",
+          "examples": [
+            "atom1",
+            "left-atom"
+          ],
+          "title": "The atom's identifier.",
+          "tooltip": "Atoms are given unique names so that the can be referred to in bonds.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "residue_index",
+        "atom_name"
+      ],
+      "title": "Atom",
+      "type": "object"
+    },
+    "Bond": {
+      "properties": {
+        "constraint_type": {
+          "const": "bond",
+          "default": "bond",
+          "description": "Specifies this is a bond constraint",
+          "title": "Constraint Type",
+          "tooltip": "Specifies a bond constraint.",
+          "type": "string"
+        },
+        "atoms": {
+          "description": "List of atoms involved in the bond",
+          "examples": [
+            {
+              "atom_name": "atom1",
+              "id": "A",
+              "residue_index": 2
+            }
+          ],
+          "items": {
+            "$ref": "#/$defs/Atom"
+          },
+          "title": "Atoms",
+          "type": "array"
+        }
+      },
+      "required": [
+        "atoms"
+      ],
+      "title": "Bond",
+      "type": "object"
+    },
+    "Contact": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 4,
+              "minLength": 1,
+              "pattern": "^([A-Z]+|[A-Za-z0-9]{4})$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Unique identifier for the polymer chain. Can be either a single letter (A-Z) or a PDB-style ID (4 alphanumeric characters)",
+          "examples": [
+            "A",
+            "1ABC"
+          ],
+          "title": "Id",
+          "tooltip": "A polymer ID, which must be in the list of polymers."
+        },
+        "residue_index": {
+          "description": "The index of the binding contact in the target chain.",
+          "exclusiveMinimum": 0,
+          "title": "Residue Index",
+          "tooltip": "A 1-based index of the contact in the polymer sequence.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "residue_index"
+      ],
+      "title": "Contact",
+      "type": "object"
+    },
+    "Ligand": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A chain ID for the ligand",
+          "examples": [
+            "B1"
+          ],
+          "title": "Id",
+          "tooltip": "An ID for the ligand. This should be a short alphanumeric ID."
+        },
+        "ccd": {
+          "anyOf": [
+            {
+              "maxLength": 5,
+              "minLength": 1,
+              "pattern": "^[A-Z0-9]{1,5}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Chemical Component Dictionary (CCD) code for the ligand",
+          "examples": [
+            "ATP",
+            "EKY",
+            "NAD",
+            "NADPH"
+          ],
+          "title": "Ccd",
+          "tooltip": "The Chemical Component Dictionary ID of the ligand [mutually exclusive with smiles]. Must be 1-5 uppercase letters/numbers."
+        },
+        "smiles": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "SMILES string representation of the ligand",
+          "examples": [
+            "CC(=O)OC1=CC=CC=C1C(=O)O"
+          ],
+          "title": "Smiles",
+          "tooltip": "A smiles string for the ligand. This argument is mutually exclusive with 'ccd'."
+        },
+        "predict_affinity": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": false,
+          "description": "Run affinity prediction for this ligand. Note: currently, affinity prediction can only be run for one ligand per request.",
+          "title": "Predict Affinity",
+          "tooltip": "Run affinity prediction. Note that only one ligand per request may have this set."
+        },
+        "output_affinity_embedding": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": false,
+          "description": "When true (and predict_affinity is true), include the 384-dimensional ligand-protein interaction embedding from the affinity module in the response.",
+          "title": "Output Affinity Embedding",
+          "tooltip": "Return the affinity module g embedding in affinities."
+        }
+      },
+      "title": "Ligand",
+      "type": "object"
+    },
+    "Modification": {
+      "description": "Represents a chemical modification to a polymer chain.",
+      "properties": {
+        "ccd": {
+          "description": "The Chemical Component Dictionary (CCD) ID of the modification",
+          "examples": [
+            "SEP",
+            "PTR",
+            "TPO",
+            "PHOS5"
+          ],
+          "maxLength": 5,
+          "minLength": 1,
+          "pattern": "^[A-Z0-9]{1,5}$",
+          "title": "Ccd",
+          "tooltip": "A Chemical Component Dictionary ID (1-5 uppercase letters/numbers).",
+          "type": "string"
+        },
+        "position": {
+          "description": "The 1-based index of the residue to modify",
+          "examples": [
+            1,
+            42,
+            100
+          ],
+          "exclusiveMinimum": 0,
+          "title": "Position",
+          "tooltip": "The 1-based position in the chain sequence.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ccd",
+        "position"
+      ],
+      "title": "Modification",
+      "type": "object"
+    },
+    "Pocket": {
+      "properties": {
+        "constraint_type": {
+          "const": "pocket",
+          "default": "pocket",
+          "description": "Specifies this is a pocket constraint",
+          "title": "Constraint Type",
+          "tooltip": "Pockets define potential binding regions between polymers and ligands.",
+          "type": "string"
+        },
+        "binder": {
+          "description": "The ID of the binding ligand molecule",
+          "examples": [
+            "A"
+          ],
+          "title": "Binder",
+          "tooltip": "Only ligands can be binders.",
+          "ttle": "Ligand Binder",
+          "type": "string"
+        },
+        "contacts": {
+          "description": "List of contacts defining the pocket",
+          "items": {
+            "$ref": "#/$defs/Contact"
+          },
+          "title": "Contacts",
+          "tooltip": "A list of contacts within the polymer chain that define the binding pocket.",
+          "type": "array"
+        }
+      },
+      "required": [
+        "binder",
+        "contacts"
+      ],
+      "title": "Pocket",
+      "type": "object"
+    },
+    "Polymer": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 4,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9]{1,4}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Unique identifier for the polymer chain. Can be either a single letter (A-Z) or a PDB-style ID (4 alphanumeric characters)",
+          "examples": [
+            "A",
+            "B",
+            "1ABC",
+            "PROT"
+          ],
+          "title": "Id",
+          "tooltip": "The chain identifier for this polymer. If not provided, will be auto-assigned (A, B, C, etc.)."
+        },
+        "molecule_type": {
+          "description": "DNA, RNA, or Protein",
+          "enum": [
+            "dna",
+            "rna",
+            "protein"
+          ],
+          "examples": [
+            "dna",
+            "rna",
+            "protein"
+          ],
+          "title": "Molecule Type",
+          "tooltip": "The molecule type of the polymer (dna, rna, or protein).",
+          "type": "string"
+        },
+        "sequence": {
+          "description": "The amino acid, DNA, or RNA sequence. For proteins, use standard single-letter amino acid codes. For DNA, use A/T/C/G. For RNA, use A/U/C/G.",
+          "examples": [
+            "MKTVRQERLK",
+            "ATCGATCG",
+            "AUCGAUCG"
+          ],
+          "maxLength": 4096,
+          "minLength": 1,
+          "pattern": "^[A-Za-z]+$",
+          "title": "Sequence",
+          "tooltip": "A polymer sequence, which should be a valid DNA, RNA, or Protein sequence.",
+          "type": "string"
+        },
+        "cyclic": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": false,
+          "description": "Whether the polymer forms a cyclic structure",
+          "examples": [
+            true,
+            false
+          ],
+          "title": "Cyclic",
+          "tooltiip": "Whether or not the polymer sequence forms a continuous loop."
+        },
+        "msa": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "additionalProperties": {
+                  "$ref": "#/$defs/AlignmentFileRecord"
+                },
+                "type": "object"
+              },
+              "maxProperties": 3,
+              "minProperties": 0,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A Dictionary [database_name -> [format -> AlignmentFileRecord]] containing alignments",
+          "title": "Msa",
+          "tooltip": "The MSA for a sequence, which should contain the sequence itself as the first sequence in the alignments, and which should be in A3M or CSV format."
+        },
+        "modifications": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Modification"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": [],
+          "description": "Modifications to the sequence at a specific residue.",
+          "title": "Modifications",
+          "tooltip": "A list of CCD modifications."
+        },
+        "structural_templates": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/StructuralTemplate"
+              },
+              "maxItems": 4,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Structural templates to guide prediction. Only allowed for protein molecules.",
+          "title": "Structural Templates",
+          "tooltip": "A list of structural templates in CIF or PDB format that can be used to guide structure prediction. Templates are automatically aligned to the query sequence."
+        }
+      },
+      "required": [
+        "molecule_type",
+        "sequence"
+      ],
+      "title": "Polymer",
+      "type": "object"
+    },
+    "StructuralTemplate": {
+      "description": "A structural template to guide protein structure prediction.",
+      "properties": {
+        "structure": {
+          "description": "The template structure content in CIF or PDB format",
+          "minLength": 1,
+          "title": "Structure",
+          "tooltip": "The full content of a template structure file (CIF or PDB format).",
+          "type": "string"
+        },
+        "format": {
+          "default": "cif",
+          "description": "Format of the structure (cif or pdb)",
+          "enum": [
+            "cif",
+            "pdb"
+          ],
+          "examples": [
+            "cif",
+            "pdb"
+          ],
+          "title": "Format",
+          "tooltip": "The format of the template structure. Both CIF (mmCIF) and PDB formats are supported.",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional name for the template",
+          "examples": [
+            "1ABC",
+            "homolog_template"
+          ],
+          "title": "Name",
+          "tooltip": "An optional identifier for this template. If not provided, one will be auto-generated."
+        },
+        "chain_id": {
+          "anyOf": [
+            {
+              "maxLength": 4,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9]{1,4}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional chain ID to use from the template structure. If not specified, the best matching chain will be automatically selected based on sequence similarity.",
+          "examples": [
+            "A",
+            "B",
+            "A1"
+          ],
+          "title": "Chain Id",
+          "tooltip": "Specific chain ID to use from the template. Leave empty for automatic selection."
+        }
+      },
+      "required": [
+        "structure"
+      ],
+      "title": "StructuralTemplate",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "complex_id": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Optional ID for this complex, analogous to the OSS Boltz input YAML/JSON filename stem (record.id). Used as the artifact folder under $NIM_OUTPUT_PATH (e.g. 8ibx/{confidence_scores,pae,pde}/) and in written filenames (confidence_8ibx_model_0.json). When omitted, artifacts go under prediction_{timestamp}/.",
+      "examples": [
+        "8ibx",
+        "my_complex"
+      ],
+      "title": "Complex ID",
+      "tooltip": "ID of the predicted complex. Matches OSS output folder naming when set; otherwise a timestamped prediction_* folder is used."
+    },
+    "polymers": {
+      "description": "A list of polymers (DNA, RNA, or Protein). Maximum 12 polymers allowed.",
+      "items": {
+        "$ref": "#/$defs/Polymer"
+      },
+      "maxItems": 12,
+      "minItems": 1,
+      "title": "Polymers",
+      "type": "array"
+    },
+    "ligands": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/Ligand"
+          },
+          "maxItems": 20,
+          "minItems": 0,
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": [],
+      "description": "A list of Ligands. Maximum 20 ligands allowed.",
+      "title": "Ligands",
+      "tooltip": "An optional list of up to 20 ligands."
+    },
+    "constraints": {
+      "anyOf": [
+        {
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Pocket"
+              },
+              {
+                "$ref": "#/$defs/Bond"
+              }
+            ]
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": [],
+      "description": "Optional constraints for the prediction",
+      "title": "Constraints",
+      "tooltip": "A list of constraints, which are either pockets or bonds."
+    },
+    "recycling_steps": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": 3,
+      "description": "This parameter controls the number of times the models output is fed back into the network for further refinement. Increasing the number of recycling steps can lead to a more accurate and refined final structure prediction as the model has more opportunities to converge on an optimal solution. However, each recycling step increases the overall computation time. Recommended for: Difficult or large protein complexes where initial predictions may need iterative improvement. Tip: For faster, preliminary assessments, a lower number of recycling steps can be used. For final, high-quality predictions, consider increasing this value.",
+      "max": 10,
+      "min": 1,
+      "title": "Recycling Steps",
+      "tooltip": "Controls the number of recycling steps; higher numbers may improve accuracy at the cost of higher runtime."
+    },
+    "sampling_steps": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": 50,
+      "description": "This setting determines the number of discrete steps the diffusion model takes to generate the 3D structure from an initial noisy state. In each step, the model removes a certain amount of noise to progressively build a coherent and accurate molecular structure. Higher values: Generally result in a more detailed and higher-quality structure, but at the cost of longer processing times. Lower values: Lead to faster generation but may produce a less refined or lower-quality output. A sufficient number of sampling steps is crucial for the diffusion process to effectively denoise and generate a valid structure.",
+      "max": 1000,
+      "min": 10,
+      "title": "Sampling Steps",
+      "tooltip": "Controls the number of sampling steps for each diffusion sample; higher numbers may improve accuracy at the cost of higher runtime."
+    },
+    "diffusion_samples": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": 1,
+      "description": "This parameter specifies the total number of independent structures the model will generate. Each sample is created from a different random initial noise distribution, leading to a potential diversity of final predictions. Generating multiple samples is useful for exploring different possible conformations of a structure and assessing the model's confidence and consistency.",
+      "max": 25,
+      "min": 1,
+      "title": "Diffusion Samples",
+      "tooltip": "Controls the number of attempted structures. Increases runtime linearly with the number of structures."
+    },
+    "max_parallel_samples": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Maximum diffusion samples processed concurrently. Leave unset to use the BioNeMo Inference Runtime default.",
+      "max": 25,
+      "min": 1,
+      "title": "Max Parallel Samples",
+      "tooltip": "Lower values reduce GPU memory usage but increase runtime."
+    },
+    "step_scale": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": 1.638,
+      "description": "This parameter adjusts the magnitude of change applied at each sampling step during the diffusion process. It influences the aggressiveness of the denoising at each iteration. Larger scale: The model takes larger steps in refining the structure. This can speed up convergence but risks overshooting optimal atomic placements, potentially leading to a less accurate or even distorted final structure. Smaller scale: The model takes more cautious, smaller steps. This can lead to a more precise and stable refinement process, but may require more sampling steps to reach a high-quality result.This parameter essentially modulates the trade-off between the speed of structure generation and the fine-grained accuracy of the final atomic coordinates.",
+      "max": 5.0,
+      "min": 0.5,
+      "title": "Step Scale",
+      "tooltip": "The step scale between each sampling / recycling step. Larger steps may be faster but less accurate. A number between 1 and 2 is recommended."
+    },
+    "without_potentials": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": false,
+      "description": "Return the results without potentials.",
+      "title": "Run Without Potentials",
+      "tooltip": "Run the model without factoring in potentials."
+    },
+    "output_format": {
+      "anyOf": [
+        {
+          "const": "mmcif",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": "mmcif",
+      "description": "The output format of the returned structure.",
+      "title": "Output Format",
+      "tooltip": "Only MMCIF is currently supported."
+    },
+    "concatenate_msas": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": false,
+      "description": "Concatenate Multiple Sequence Alignments for a polymer into one alignment.",
+      "title": "Concatenate MSAs",
+      "tooltip": "When set, all input MSAs are concatenated into a single input for each polymer."
+    },
+    "sampling_steps_affinity": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": 200,
+      "description": "The number of sampling steps to use for affinity prediction. Higher values may improve accuracy but increase runtime.",
+      "max": 1000,
+      "min": 10,
+      "title": "Affinity Sampling Steps",
+      "tooltip": "Controls the number of sampling steps for affinity prediction; higher numbers may improve accuracy at the cost of higher runtime."
+    },
+    "diffusion_samples_affinity": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": 5,
+      "description": "The number of diffusion samples to use for affinity prediction. Higher values may improve reliability but increase runtime.",
+      "max": 10,
+      "min": 1,
+      "title": "Affinity Diffusion Samples",
+      "tooltip": "Controls the number of diffusion samples for affinity prediction; higher numbers may improve reliability at the cost of higher runtime."
+    },
+    "affinity_mw_correction": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": false,
+      "description": "Whether to add the Molecular Weight correction to the affinity value head.",
+      "title": "Affinity MW Correction",
+      "tooltip": "Enable molecular weight correction for affinity prediction."
+    },
+    "write_full_pae": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": false,
+      "description": "Whether to save the full PAE (Predicted Aligned Error) matrix as compressed .npz files under $NIM_OUTPUT_PATH/{complex_id}/pae/ (or prediction_{timestamp}/pae/ when name is omitted). Matrices are not included in the JSON response.",
+      "title": "Write Full PAE",
+      "tooltip": "Enable to write full PAE matrices under $NIM_OUTPUT_PATH as .npz files."
+    },
+    "write_full_pde": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": false,
+      "description": "Whether to save the full PDE (Predicted Distance Error) matrix as compressed .npz files under $NIM_OUTPUT_PATH/{complex_id}/pde/ (or prediction_{timestamp}/pde/ when name is omitted). Matrices are not included in the JSON response.",
+      "title": "Write Full PDE",
+      "tooltip": "Enable to write full PDE matrices under $NIM_OUTPUT_PATH as .npz files."
+    }
+  },
+  "required": [
+    "polymers"
+  ],
+  "title": "BoltzPredictionRequest",
+  "type": "object",
+  "$comment": "Generated from BoltzPredictionRequest.model_json_schema() in nvcr.io/nim/mit/boltz2:1.9.0; image digest sha256:a2eb69458fd9505ce9fdaebb16e206da909666ec8d94a297d81e7b57a2f6c090; 2026-09-11. Source models copyright NVIDIA; Apache-2.0."
+}

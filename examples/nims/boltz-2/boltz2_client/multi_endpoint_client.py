@@ -119,7 +119,8 @@ class MultiEndpointClient:
         self._health_check_task = None
         if is_async:
             try:
-                self._health_check_task = asyncio.create_task(self._health_check_loop())
+                loop = asyncio.get_running_loop()
+                self._health_check_task = loop.create_task(self._health_check_loop())
             except RuntimeError:
                 # No event loop running, skip async health checks
                 pass
@@ -298,7 +299,7 @@ class MultiEndpointClient:
 
         return healthy_endpoints[0]
     
-    async def predict(self, request: PredictionRequest, save_structures: bool = True) -> PredictionResponse:
+    async def predict(self, request: PredictionRequest, save_structures: bool = True, **kwargs) -> PredictionResponse:
         """
         Make a prediction using load balancing across endpoints.
         
@@ -340,9 +341,9 @@ class MultiEndpointClient:
                 
                 # Make the request
                 if self.is_async:
-                    response = await endpoint.client.predict(request, save_structures=save_structures)
+                    response = await endpoint.client.predict(request, save_structures=save_structures, **kwargs)
                 else:
-                    response = endpoint.client.predict(request, save_structures=save_structures)
+                    response = endpoint.client.predict(request, save_structures=save_structures, **kwargs)
                 
                 # Update statistics
                 elapsed = time.time() - start_time
@@ -375,7 +376,7 @@ class MultiEndpointClient:
             f"All endpoints failed. Errors: {'; '.join(errors)}"
         )
     
-    def predict_sync(self, request: PredictionRequest) -> PredictionResponse:
+    def predict_sync(self, request: PredictionRequest, **kwargs) -> PredictionResponse:
         """Synchronous version of predict."""
         if self.is_async:
             raise RuntimeError("Use predict() for async client")
@@ -407,7 +408,7 @@ class MultiEndpointClient:
                 start_time = time.time()
                 
                 # Make the synchronous request
-                response = endpoint.client.predict(request)
+                response = endpoint.client.predict(request, **kwargs)
                 
                 # Update statistics
                 elapsed = time.time() - start_time
@@ -452,7 +453,8 @@ class MultiEndpointClient:
         msa: Optional[Dict[str, Dict[str, AlignmentFileRecord]]] = None,
         save_structures: bool = True,
         output_dir: Optional[Path] = None,
-        progress_callback: Optional[Callable[[str], None]] = None
+        progress_callback: Optional[Callable[[str], None]] = None,
+        **kwargs,
     ) -> PredictionResponse:
         """
         Predict protein structure using load balancing across endpoints.
@@ -506,7 +508,8 @@ class MultiEndpointClient:
                         msa=msa,
                         save_structures=save_structures,
                         output_dir=output_dir,
-                        progress_callback=progress_callback
+                        progress_callback=progress_callback,
+                        **kwargs,
                     )
                 else:
                     response = endpoint.client.predict_protein_structure(
@@ -520,7 +523,8 @@ class MultiEndpointClient:
                         msa=msa,
                         save_structures=save_structures,
                         output_dir=output_dir,
-                        progress_callback=progress_callback
+                        progress_callback=progress_callback,
+                        **kwargs,
                     )
                 
                 elapsed = time.time() - start_time
@@ -567,7 +571,8 @@ class MultiEndpointClient:
         affinity_mw_correction: Optional[bool] = None,
         save_structures: bool = True,
         output_dir: Optional[Path] = None,
-        progress_callback: Optional[Callable[[str], None]] = None
+        progress_callback: Optional[Callable[[str], None]] = None,
+        **kwargs,
     ) -> PredictionResponse:
         """
         Predict protein-ligand complex using load balancing across endpoints.
@@ -610,7 +615,8 @@ class MultiEndpointClient:
                         affinity_mw_correction=affinity_mw_correction,
                         save_structures=save_structures,
                         output_dir=output_dir,
-                        progress_callback=progress_callback
+                        progress_callback=progress_callback,
+                        **kwargs,
                     )
                 else:
                     response = endpoint.client.predict_protein_ligand_complex(
@@ -628,7 +634,8 @@ class MultiEndpointClient:
                         affinity_mw_correction=affinity_mw_correction,
                         save_structures=save_structures,
                         output_dir=output_dir,
-                        progress_callback=progress_callback
+                        progress_callback=progress_callback,
+                        **kwargs,
                     )
                 
                 elapsed = time.time() - start_time
@@ -670,7 +677,8 @@ class MultiEndpointClient:
         sampling_steps: int = 50,
         save_structures: bool = True,
         output_dir: Optional[Path] = None,
-        progress_callback: Optional[Callable[[str], None]] = None
+        progress_callback: Optional[Callable[[str], None]] = None,
+        **kwargs,
     ) -> PredictionResponse:
         """
         Predict covalent complex using load balancing across endpoints.
@@ -708,7 +716,8 @@ class MultiEndpointClient:
                         sampling_steps=sampling_steps,
                         save_structures=save_structures,
                         output_dir=output_dir,
-                        progress_callback=progress_callback
+                        progress_callback=progress_callback,
+                        **kwargs,
                     )
                 else:
                     response = endpoint.client.predict_covalent_complex(
@@ -721,7 +730,8 @@ class MultiEndpointClient:
                         sampling_steps=sampling_steps,
                         save_structures=save_structures,
                         output_dir=output_dir,
-                        progress_callback=progress_callback
+                        progress_callback=progress_callback,
+                        **kwargs,
                     )
                 
                 elapsed = time.time() - start_time
@@ -763,7 +773,8 @@ class MultiEndpointClient:
         concatenate_msas: bool = False,
         save_structures: bool = True,
         output_dir: Optional[Path] = None,
-        progress_callback: Optional[Callable[[str], None]] = None
+        progress_callback: Optional[Callable[[str], None]] = None,
+        **kwargs,
     ) -> PredictionResponse:
         """
         Predict DNA-protein complex using load balancing across endpoints.
@@ -801,7 +812,8 @@ class MultiEndpointClient:
                         concatenate_msas=concatenate_msas,
                         save_structures=save_structures,
                         output_dir=output_dir,
-                        progress_callback=progress_callback
+                        progress_callback=progress_callback,
+                        **kwargs,
                     )
                 else:
                     response = endpoint.client.predict_dna_protein_complex(
@@ -814,7 +826,8 @@ class MultiEndpointClient:
                         concatenate_msas=concatenate_msas,
                         save_structures=save_structures,
                         output_dir=output_dir,
-                        progress_callback=progress_callback
+                        progress_callback=progress_callback,
+                        **kwargs,
                     )
                 
                 elapsed = time.time() - start_time
@@ -850,7 +863,8 @@ class MultiEndpointClient:
         request: PredictionRequest,
         save_structures: bool = True,
         output_dir: Optional[Path] = None,
-        progress_callback: Optional[Callable[[str], None]] = None
+        progress_callback: Optional[Callable[[str], None]] = None,
+        **kwargs,
     ) -> PredictionResponse:
         """
         Predict with advanced parameters using load balancing across endpoints.
@@ -882,14 +896,16 @@ class MultiEndpointClient:
                         request=request,
                         save_structures=save_structures,
                         output_dir=output_dir,
-                        progress_callback=progress_callback
+                        progress_callback=progress_callback,
+                        **kwargs,
                     )
                 else:
                     response = endpoint.client.predict_with_advanced_parameters(
                         request=request,
                         save_structures=save_structures,
                         output_dir=output_dir,
-                        progress_callback=progress_callback
+                        progress_callback=progress_callback,
+                        **kwargs,
                     )
                 
                 elapsed = time.time() - start_time
@@ -925,7 +941,8 @@ class MultiEndpointClient:
         config: Any,
         save_structures: bool = True,
         output_dir: Optional[Path] = None,
-        progress_callback: Optional[Callable[[str], None]] = None
+        progress_callback: Optional[Callable[[str], None]] = None,
+        **kwargs,
     ) -> PredictionResponse:
         """
         Predict from YAML config using load balancing across endpoints.
@@ -957,14 +974,16 @@ class MultiEndpointClient:
                         config=config,
                         save_structures=save_structures,
                         output_dir=output_dir,
-                        progress_callback=progress_callback
+                        progress_callback=progress_callback,
+                        **kwargs,
                     )
                 else:
                     response = endpoint.client.predict_from_yaml_config(
                         config=config,
                         save_structures=save_structures,
                         output_dir=output_dir,
-                        progress_callback=progress_callback
+                        progress_callback=progress_callback,
+                        **kwargs,
                     )
                 
                 elapsed = time.time() - start_time
@@ -1001,7 +1020,8 @@ class MultiEndpointClient:
         msa_dir: Optional[Union[str, Path]] = None,
         save_structures: bool = True,
         output_dir: Optional[Path] = None,
-        progress_callback: Optional[Callable[[str], None]] = None
+        progress_callback: Optional[Callable[[str], None]] = None,
+        **kwargs,
     ) -> PredictionResponse:
         """
         Predict from YAML file using load balancing across endpoints.
@@ -1034,7 +1054,8 @@ class MultiEndpointClient:
                         msa_dir=msa_dir,
                         save_structures=save_structures,
                         output_dir=output_dir,
-                        progress_callback=progress_callback
+                        progress_callback=progress_callback,
+                        **kwargs,
                     )
                 else:
                     response = endpoint.client.predict_from_yaml_file(
@@ -1042,7 +1063,8 @@ class MultiEndpointClient:
                         msa_dir=msa_dir,
                         save_structures=save_structures,
                         output_dir=output_dir,
-                        progress_callback=progress_callback
+                        progress_callback=progress_callback,
+                        **kwargs,
                     )
                 
                 elapsed = time.time() - start_time
@@ -1148,7 +1170,8 @@ class MultiEndpointClient:
         msa: Optional[Dict[str, Dict[str, AlignmentFileRecord]]] = None,
         save_structures: bool = True,
         output_dir: Optional[Path] = None,
-        progress_callback: Optional[Callable[[str], None]] = None
+        progress_callback: Optional[Callable[[str], None]] = None,
+        **kwargs,
     ) -> PredictionResponse:
         """Synchronous version of predict_protein_structure."""
         if self.is_async:
@@ -1187,7 +1210,8 @@ class MultiEndpointClient:
                     msa=msa,
                     save_structures=save_structures,
                     output_dir=output_dir,
-                    progress_callback=progress_callback
+                    progress_callback=progress_callback,
+                    **kwargs,
                 )
                 
                 elapsed = time.time() - start_time
@@ -1230,7 +1254,8 @@ class MultiEndpointClient:
         sampling_steps: int = 50,
         save_structures: bool = True,
         output_dir: Optional[Path] = None,
-        progress_callback: Optional[Callable[[str], None]] = None
+        progress_callback: Optional[Callable[[str], None]] = None,
+        **kwargs,
     ) -> PredictionResponse:
         """Synchronous version of predict_protein_ligand_complex."""
         if self.is_async:
@@ -1269,7 +1294,8 @@ class MultiEndpointClient:
                     sampling_steps=sampling_steps,
                     save_structures=save_structures,
                     output_dir=output_dir,
-                    progress_callback=progress_callback
+                    progress_callback=progress_callback,
+                    **kwargs,
                 )
                 
                 elapsed = time.time() - start_time
@@ -1311,7 +1337,8 @@ class MultiEndpointClient:
         sampling_steps: int = 50,
         save_structures: bool = True,
         output_dir: Optional[Path] = None,
-        progress_callback: Optional[Callable[[str], None]] = None
+        progress_callback: Optional[Callable[[str], None]] = None,
+        **kwargs,
     ) -> PredictionResponse:
         """Synchronous version of predict_covalent_complex."""
         if self.is_async:
@@ -1349,7 +1376,8 @@ class MultiEndpointClient:
                     sampling_steps=sampling_steps,
                     save_structures=save_structures,
                     output_dir=output_dir,
-                    progress_callback=progress_callback
+                    progress_callback=progress_callback,
+                    **kwargs,
                 )
                 
                 elapsed = time.time() - start_time
@@ -1391,7 +1419,8 @@ class MultiEndpointClient:
         concatenate_msas: bool = False,
         save_structures: bool = True,
         output_dir: Optional[Path] = None,
-        progress_callback: Optional[Callable[[str], None]] = None
+        progress_callback: Optional[Callable[[str], None]] = None,
+        **kwargs,
     ) -> PredictionResponse:
         """Synchronous version of predict_dna_protein_complex."""
         if self.is_async:
@@ -1429,7 +1458,8 @@ class MultiEndpointClient:
                     concatenate_msas=concatenate_msas,
                     save_structures=save_structures,
                     output_dir=output_dir,
-                    progress_callback=progress_callback
+                    progress_callback=progress_callback,
+                    **kwargs,
                 )
                 
                 elapsed = time.time() - start_time
@@ -1465,7 +1495,8 @@ class MultiEndpointClient:
         request: PredictionRequest,
         save_structures: bool = True,
         output_dir: Optional[Path] = None,
-        progress_callback: Optional[Callable[[str], None]] = None
+        progress_callback: Optional[Callable[[str], None]] = None,
+        **kwargs,
     ) -> PredictionResponse:
         """Synchronous version of predict_with_advanced_parameters."""
         if self.is_async:
@@ -1497,7 +1528,8 @@ class MultiEndpointClient:
                     request=request,
                     save_structures=save_structures,
                     output_dir=output_dir,
-                    progress_callback=progress_callback
+                    progress_callback=progress_callback,
+                    **kwargs,
                 )
                 
                 elapsed = time.time() - start_time
@@ -1533,7 +1565,8 @@ class MultiEndpointClient:
         config: Any,
         save_structures: bool = True,
         output_dir: Optional[Path] = None,
-        progress_callback: Optional[Callable[[str], None]] = None
+        progress_callback: Optional[Callable[[str], None]] = None,
+        **kwargs,
     ) -> PredictionResponse:
         """Synchronous version of predict_from_yaml_config."""
         if self.is_async:
@@ -1565,7 +1598,8 @@ class MultiEndpointClient:
                     config=config,
                     save_structures=save_structures,
                     output_dir=output_dir,
-                    progress_callback=progress_callback
+                    progress_callback=progress_callback,
+                    **kwargs,
                 )
                 
                 elapsed = time.time() - start_time
@@ -1602,7 +1636,8 @@ class MultiEndpointClient:
         msa_dir: Optional[Union[str, Path]] = None,
         save_structures: bool = True,
         output_dir: Optional[Path] = None,
-        progress_callback: Optional[Callable[[str], None]] = None
+        progress_callback: Optional[Callable[[str], None]] = None,
+        **kwargs,
     ) -> PredictionResponse:
         """Synchronous version of predict_from_yaml_file."""
         if self.is_async:
@@ -1635,7 +1670,8 @@ class MultiEndpointClient:
                     msa_dir=msa_dir,
                     save_structures=save_structures,
                     output_dir=output_dir,
-                    progress_callback=progress_callback
+                    progress_callback=progress_callback,
+                    **kwargs,
                 )
                 
                 elapsed = time.time() - start_time

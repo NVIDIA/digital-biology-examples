@@ -38,6 +38,7 @@ def create_client(ctx):
               help='Number of sampling steps (10-1000, default: 50)')
 @click.option('--diffusion-samples', default=1, type=click.IntRange(1, 25),
               help='Number of diffusion samples (1-25, default: 1)')
+@click.option('--max-parallel-samples', default=None, type=click.IntRange(1, 25), help='Concurrent diffusion samples (NIM 1.9+)')
 @click.option('--step-scale', default=1.638, type=click.FloatRange(0.5, 5.0),
               help='Step scale for diffusion sampling (0.5-5.0, default: 1.638)')
 @click.option('--msa-file', multiple=True, type=(str, click.Choice(['a3m', 'csv', 'fasta'])),
@@ -45,16 +46,16 @@ def create_client(ctx):
 @click.option('--output-dir', type=click.Path(), default='.', help='Directory to save output files (structure_0.cif, prediction_metadata.json). Default: current directory')
 @click.option('--no-save', is_flag=True, help='Do not save structure files')
 @click.option('--write-full-pae', is_flag=True, default=False,
-              help='Output full PAE (Predicted Aligned Error) matrix as JSON')
+              help='Write PAE NPZ files under NIM_OUTPUT_PATH on the NIM 1.9+ server')
 @click.option('--write-full-pde', is_flag=True, default=False,
-              help='Output full PDE (Predicted Distance Error) matrix as JSON')
+              help='Write PDE NPZ files under NIM_OUTPUT_PATH on the NIM 1.9+ server')
 @click.option('--output-format', type=click.Choice(['cif', 'pdb']), default='cif',
               help='Output structure format: cif (default) or pdb')
 @click.pass_context
 def protein(ctx, sequence: str, polymer_id: str, recycling_steps: int, sampling_steps: int,
            diffusion_samples: int, step_scale: float, msa_file: List[Tuple[str, str]], 
            output_dir: str, no_save: bool, write_full_pae: bool, write_full_pde: bool,
-           output_format: str):
+           output_format: str, max_parallel_samples: Optional[int]):
     """
     Predict protein structure with optional MSA guidance.
     
@@ -118,6 +119,7 @@ def protein(ctx, sequence: str, polymer_id: str, recycling_steps: int, sampling_
                 recycling_steps=recycling_steps,
                 sampling_steps=sampling_steps,
                 diffusion_samples=diffusion_samples,
+                max_parallel_samples=max_parallel_samples,
                 step_scale=step_scale,
                 write_full_pae=write_full_pae,
                 write_full_pde=write_full_pde
@@ -164,8 +166,11 @@ def protein(ctx, sequence: str, polymer_id: str, recycling_steps: int, sampling_
                             convert_cif_to_pdb(cif_path, pdb_path)
                             print_info(f"Converted to PDB: {pdb_path}")
             
-            # Save PAE matrix if requested and available
-            if write_full_pae and result.pae:
+            if write_full_pae or write_full_pde:
+                print_info("NIM 1.9+ writes matrices under server NIM_OUTPUT_PATH/prediction_*/{pae,pde}/. The JSON pae/pde fields are null; mount the server output directory to access NPZ files.")
+
+            # Save legacy inline matrices if available
+            if not no_save and write_full_pae and result.pae:
                 import json
                 pae_path = Path(output_dir) / f"structure_{polymer_id}.pae.json"
                 pae_path.write_text(json.dumps({'pae': result.pae}, indent=2))
@@ -173,7 +178,7 @@ def protein(ctx, sequence: str, polymer_id: str, recycling_steps: int, sampling_
                 print_info(f"PAE matrix saved to: {pae_path} (shape: {pae_shape})")
             
             # Save PDE matrix if requested and available
-            if write_full_pde and result.pde:
+            if not no_save and write_full_pde and result.pde:
                 import json
                 pde_path = Path(output_dir) / f"structure_{polymer_id}.pde.json"
                 pde_path.write_text(json.dumps({'pde': result.pde}, indent=2))
@@ -197,6 +202,7 @@ def protein(ctx, sequence: str, polymer_id: str, recycling_steps: int, sampling_
 @click.option('--recycling-steps', default=3, type=click.IntRange(1, 10))
 @click.option('--sampling-steps', default=50, type=click.IntRange(10, 1000))
 @click.option('--predict-affinity', is_flag=True, help='Enable affinity prediction for the ligand')
+@click.option('--output-affinity-embedding', is_flag=True, help='Return affinity embeddings; requires --predict-affinity (NIM 1.8+)')
 @click.option('--sampling-steps-affinity', default=200, type=click.IntRange(10, 1000), help='Sampling steps for affinity prediction (default: 200)')
 @click.option('--diffusion-samples-affinity', default=5, type=click.IntRange(1, 10), help='Diffusion samples for affinity prediction (default: 5)')
 @click.option('--affinity-mw-correction', is_flag=True, help='Apply molecular weight correction to affinity prediction')
@@ -210,7 +216,7 @@ def ligand(ctx, protein_sequence: str, smiles: Optional[str], ccd: Optional[str]
           recycling_steps: int, sampling_steps: int, predict_affinity: bool,
           sampling_steps_affinity: int, diffusion_samples_affinity: int, 
           affinity_mw_correction: bool, msa_file: List[Tuple[str, str]], 
-          output_dir: str, no_save: bool):
+          output_dir: str, no_save: bool, output_affinity_embedding: bool):
     """
     Predict protein-ligand complex structure with optional MSA guidance.
     
@@ -284,10 +290,11 @@ def ligand(ctx, protein_sequence: str, smiles: Optional[str], ccd: Optional[str]
                     recycling_steps=recycling_steps,
                     sampling_steps=sampling_steps,
                     predict_affinity=predict_affinity,
+                    output_affinity_embedding=output_affinity_embedding,
                     sampling_steps_affinity=sampling_steps_affinity,
                     diffusion_samples_affinity=diffusion_samples_affinity,
                     affinity_mw_correction=affinity_mw_correction,
-                    save_structures=False,
+                    save_structures=not no_save,
                     msa_files=msa_files if msa_files else None,
                     output_dir=Path(output_dir),
                     progress_callback=progress_callback
@@ -323,16 +330,16 @@ def ligand(ctx, protein_sequence: str, smiles: Optional[str], ccd: Optional[str]
                 
                 # Interpretation
                 if affinity.affinity_probability_binary[0] > 0.7:
-                    print_success("Strong binding predicted (>70% probability)")
+                    print_success("High predicted binder likelihood (>70% probability)")
                 elif affinity.affinity_probability_binary[0] > 0.5:
-                    print_info("Moderate binding predicted (>50% probability)")
+                    print_info("Predicted binder likelihood above 50%")
                 else:
-                    print_info("Weak binding predicted (<50% probability)")
+                    print_info("Predicted binder likelihood at or below 50%")
             
             # Save results
             if not no_save:
                 output_path = Path(output_dir)
-                output_path.mkdir(exist_ok=True)
+                output_path.mkdir(parents=True, exist_ok=True)
                 
                 # Save structure
                 structure_file = output_path / "structure_0.cif"
@@ -732,7 +739,7 @@ def yaml_config(ctx, yaml_file: str, msa_dir: Optional[str], recycling_steps: in
     """
     Run prediction from YAML configuration file (official Boltz format).
     
-    This command supports the official Boltz YAML configuration format as used
+    This command supports the supported Boltz YAML configuration subset as used
     in the original Boltz repository examples.
     
     YAML_FILE: Path to YAML configuration file
@@ -845,7 +852,7 @@ def yaml_config(ctx, yaml_file: str, msa_dir: Optional[str], recycling_steps: in
                             if polymer_idx < len(request.polymers):
                                 request.polymers[polymer_idx].msa = {"default": {format_type: msa_record}}
                         else:
-                            print_warning(f"MSA file not found: {msa_path}")
+                            raise ValueError(f"MSA file not found: {msa_path}")
                 
                 # Override with CLI parameters
                 request.recycling_steps = recycling_steps

@@ -142,9 +142,12 @@ def screen(ctx, target_sequence, compounds_file, target_name, output_dir, no_aff
                 console.print(f"\n[bold]Results saved to {output_dir}:[/bold]")
                 for key, path in saved.items():
                     console.print(f"  - {key}: {path}")
+            if result.failed_results:
+                raise click.ClickException(f"{len(result.failed_results)} compound predictions failed; inspect the screening results.")
             
+        except click.ClickException:
+            raise
         except Exception as e:
             console.print(f"[red]Error: {e}[/red]")
             raise click.Abort()
-
 

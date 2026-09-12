@@ -1,0 +1,8 @@
+{
+  "complex_id": "protein_demo",
+  "polymers": [{"id": "A", "molecule_type": "protein", "sequence": "MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLAGG"}],
+  "diffusion_samples": 2,
+  "max_parallel_samples": 1,
+  "write_full_pae": true,
+  "write_full_pde": true
+}

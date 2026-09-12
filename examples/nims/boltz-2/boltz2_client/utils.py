@@ -43,7 +43,7 @@ def validate_sequence(sequence: str, molecule_type: str) -> bool:
     
     if molecule_type.lower() == "protein":
         # Standard amino acid codes
-        valid_chars = set("ACDEFGHIKLMNPQRSTVWY")
+        valid_chars = set("ACDEFGHIKLMNPQRSTVWYX")
         invalid_chars = set(sequence) - valid_chars
         if invalid_chars:
             raise ValueError(f"Invalid amino acid characters: {invalid_chars}")
@@ -501,21 +501,7 @@ def save_prediction_outputs(
         logger.info(f"Saved {len(response.structures)} structure(s) to {output_dir}")
 
     if save_scores:
-        scores = {
-            'confidence_scores': response.confidence_scores,
-            'ptm_scores': response.ptm_scores,
-            'iptm_scores': response.iptm_scores,
-            'complex_plddt_scores': response.complex_plddt_scores,
-            'complex_iplddt_scores': response.complex_iplddt_scores,
-            'complex_pde_scores': response.complex_pde_scores,
-            'complex_ipde_scores': response.complex_ipde_scores,
-            'chains_ptm_scores': response.chains_ptm_scores,
-            'pair_chains_iptm_scores': response.pair_chains_iptm_scores,
-            'ligand_iptm_scores': response.ligand_iptm_scores,
-            'protein_iptm_scores': response.protein_iptm_scores,
-            'metrics': response.metrics,
-        }
-        scores = {k: v for k, v in scores.items() if v is not None}
+        scores = response.model_dump(mode="json", exclude={"structures"}, exclude_none=True)
         scores_path = output_dir / f"{base_name}.scores.json"
         scores_path.write_text(json.dumps(scores, indent=2))
         saved_paths['scores'] = scores_path

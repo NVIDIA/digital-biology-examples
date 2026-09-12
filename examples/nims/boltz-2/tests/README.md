@@ -1,62 +1,27 @@
 # Tests
 
-## Running tests
-
 ```bash
 pip install -e ".[dev]"
-
-# Mock tests only (default, no real endpoints needed)
-pytest
-
-# Include live-endpoint tests (requires running NIM / SageMaker / NVIDIA hosted)
-pytest -m real_endpoint
-
-# Performance / concurrency tests
-pytest -m performance
-
-# Skip slow tests
-pytest -m "not slow"
+pytest                                   # offline tests
+pytest -m real_endpoint                  # live endpoint tests
+pytest -m performance                    # concurrency and stress tests
+pytest -o addopts="-v --tb=short"          # complete suite
 ```
 
-## Markers (defined in `pytest.ini`)
+| Coverage | Location |
+|---|---|
+| Models, request serialization, YAML, HTTP errors, saved outputs | `test_nim_19.py` |
+| Client methods, endpoint dispatch/recovery, CLI parsing | `test_basic.py`, `test_*endpoint*.py`, `test_integration_scenarios.py` |
+| MSA conversion and service adapters | `test_a3m_to_csv_converter.py`, `test_msa_search.py` |
+| Notebook format and synthetic execution | `test_notebooks.py` |
+| Actual async/sync Python methods and Bash CLI | `test_live_workflows.py` |
+| Real local/hosted/SageMaker endpoints | `test_live_endpoints.py` |
+| 50 protein and 147 affinity predictions, with assertions | `test_comprehensive_stress.py` |
 
-| Marker | Purpose |
-|--------|---------|
-| `unit` | Fast, no external dependencies |
-| `integration` | Medium speed, may touch external deps |
-| `slow` | Real API calls / long-running operations |
-| `real_endpoint` | Requires a live Boltz-2 NIM (or SageMaker / NVIDIA hosted) |
-| `performance` | Load / concurrency benchmarks |
-| `api` | Python API tests |
-| `cli` | CLI tests |
+`BOLTZ2_NIM_URL` defaults to localhost:8000. `MSA_NIM_URL` enables the separate MSA
+CLI checks. Hosted tests use `NVIDIA_API_KEY` or `NGC_API_KEY`. SageMaker tests
+require `SAGEMAKER_ENDPOINT_NAME` and its region; missing endpoints are skipped.
 
-## Test files
-
-| File | Scope |
-|------|-------|
-| `conftest.py` | Shared constants, fixtures, pytest config |
-| `test_basic.py` | Client init, model imports |
-| `test_multi_endpoint_functionality.py` | Per-method API coverage (protein, ligand, covalent, DNA, YAML, VS, health, metadata) through single + multi-endpoint mocks |
-| `test_integration_scenarios.py` | Scenario-level workflows (e2e prediction, VS, LB strategies, failover, health monitoring, error recovery) |
-| `test_cli_multi_endpoint.py` | CLI command parsing and option validation |
-| `test_msa_search.py` | MSA search client, format converter, Boltz integration |
-| `test_a3m_to_csv_converter.py` | A3M-to-multimer-CSV conversion logic |
-| `test_examples_syntax.py` | Syntax + import validation for example scripts |
-| `test_live_endpoints.py` | Live tests: NIM, SageMaker, NVIDIA hosted, multi-endpoint, perf, CLI smoke |
-| `test_comprehensive_stress.py` | High-volume concurrent prediction stress tests |
-
-## Environment variables for live tests
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `BOLTZ2_NIM_URL` | `http://localhost:8000` | Self-hosted NIM endpoint |
-| `SAGEMAKER_ENDPOINT_NAME` | *(skip if unset)* | AWS SageMaker endpoint name |
-| `SAGEMAKER_REGION` | `us-east-1` | AWS region |
-| `NVIDIA_API_KEY` | *(skip if unset)* | NVIDIA hosted API key |
-| `NVIDIA_HOSTED_URL` | `https://health.api.nvidia.com` | NVIDIA hosted base URL |
-
-## Coverage
-
-```bash
-pytest --cov=boltz2_client --cov-report=term-missing
-```
+For actual notebook execution, output inspection and package checks, see
+[development](../docs/development.md). [Recorded results](../docs/refresh-review.md)
+distinguish verified behavior, service failures and skipped checks.

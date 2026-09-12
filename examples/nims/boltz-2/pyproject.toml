@@ -22,16 +22,15 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 dependencies = [
     "httpx>=0.24.0",
     "pydantic>=2.0.0",
@@ -40,16 +39,26 @@ dependencies = [
     "rich>=13.0.0",
     "click>=8.0.0",
     "PyYAML>=6.0.0",
-    "py3Dmol>=2.0.0",
     "aiohttp>=3.8.0",
 ]
 
 [project.optional-dependencies]
+screening = ["pandas>=1.5"]
+notebooks = ["jupyterlab>=4", "ipykernel>=6", "py3Dmol>=2.0", "matplotlib>=3.6", "numpy>=1.23"]
+analysis = ["numpy>=1.23", "biopython>=1.80"]
 sagemaker = ["boto3>=1.26.0"]
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
     "pandas>=1.5.0",
+    "biopython>=1.80",
+    "nbformat>=5.7",
+    "jsonschema>=4.17",
+    "py3Dmol>=2.0",
+    "nbclient>=0.7",
+    "ipykernel>=6",
+    "build>=1",
+    "twine>=6",
 ]
 
 [project.scripts]
@@ -70,4 +79,4 @@ include = ["boltz2_client*"]
 
 [tool.setuptools.package-data]
 boltz2_client = ["*.md", "*.txt"]
-"boltz2_client.data" = ["*.txt"] 
+"boltz2_client.data" = ["*.txt"]

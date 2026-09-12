@@ -32,7 +32,7 @@ from boltz2_client.models import PredictionResponse, HealthStatus
 BOLTZ2_NIM_URL = os.getenv("BOLTZ2_NIM_URL", "http://localhost:8000")
 SAGEMAKER_ENDPOINT_NAME = os.getenv("SAGEMAKER_ENDPOINT_NAME")
 SAGEMAKER_REGION = os.getenv("SAGEMAKER_REGION", "us-east-1")
-NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY")
+NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY") or os.getenv("NGC_API_KEY")
 NVIDIA_HOSTED_URL = os.getenv(
     "NVIDIA_HOSTED_URL", "https://health.api.nvidia.com"
 )
@@ -109,12 +109,12 @@ class TestNIMEndpoint:
         assert len(result.structures) >= 1
 
     def test_sync_health_check(self, sync_client):
-        health = sync_client.health_check_sync()
+        health = sync_client.health_check()
         assert isinstance(health, HealthStatus)
         assert health.status == "healthy"
 
     def test_sync_protein_prediction(self, sync_client):
-        result = sync_client.predict_protein_structure_sync(
+        result = sync_client.predict_protein_structure(
             sequence=SHORT_SEQ,
             recycling_steps=1,
             sampling_steps=10,
@@ -180,8 +180,8 @@ class TestNVIDIAHostedEndpoint:
         )
 
     async def test_health_check(self, client):
-        health = await client.health_check()
-        assert isinstance(health, HealthStatus)
+        with pytest.raises(NotImplementedError, match="no readiness API"):
+            await client.health_check()
 
     async def test_protein_prediction(self, client):
         result = await client.predict_protein_structure(
@@ -271,8 +271,7 @@ class TestNIMPerformance:
             for i in range(3)
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        successful = sum(1 for r in results if not isinstance(r, Exception))
-        assert successful > 0, "At least one concurrent prediction should succeed"
+        assert all(isinstance(r, PredictionResponse) and r.structures for r in results), results
 
 
 # ---------------------------------------------------------------------------

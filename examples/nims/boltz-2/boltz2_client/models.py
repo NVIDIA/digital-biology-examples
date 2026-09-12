@@ -12,13 +12,24 @@ available parameters and features.
 """
 
 from typing import List, Optional, Dict, Any, Literal, Union
-from pydantic import BaseModel, Field, field_validator, ValidationInfo
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator, ValidationInfo
 from datetime import datetime
 import re
 
 
+class RequestModel(BaseModel):
+    """Reject misspelled or unsupported request fields instead of dropping them."""
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+
 class AffinityPrediction(BaseModel):
     """Affinity prediction results for a ligand."""
+    model_config = ConfigDict(extra="allow")
+
+    affinity_embedding: Optional[List[List[float]]] = None
+    model_1_affinity_embedding: Optional[List[List[float]]] = None
+    model_2_affinity_embedding: Optional[List[List[float]]] = None
     
     affinity_pred_value: List[float] = Field(
         ..., description="The predicted log(IC50) values"
@@ -43,7 +54,7 @@ class AffinityPrediction(BaseModel):
     )
 
 
-class Modification(BaseModel):
+class Modification(RequestModel):
     """Represents a chemical modification to a polymer chain."""
     ccd: str = Field(..., description="The Chemical Component Dictionary (CCD) ID of the modification (1-5 uppercase letters/numbers)")
     position: int = Field(..., gt=0, description="The 1-based index of the residue to modify")
@@ -57,7 +68,7 @@ class Modification(BaseModel):
         return v
 
 
-class AlignmentFileRecord(BaseModel):
+class AlignmentFileRecord(RequestModel):
     """Represents a single alignment file record."""
     alignment: str = Field(..., description="Raw alignment file content as string")
     format: Literal["sto", "a3m", "csv", "fasta"] = Field(..., description="Alignment file format")
@@ -72,7 +83,7 @@ class AlignmentFileRecord(BaseModel):
         return v
 
 
-class StructuralTemplate(BaseModel):
+class StructuralTemplate(RequestModel):
     """A structural template to guide protein structure prediction."""
     structure: str = Field(..., min_length=1, description="The template structure content in CIF or PDB format")
     format: Literal["cif", "pdb"] = Field("cif", description="Format of the structure (cif or pdb)")
@@ -100,12 +111,12 @@ class StructuralTemplate(BaseModel):
         return v
 
 
-class Polymer(BaseModel):
+class Polymer(RequestModel):
     """Represents a polymer (protein, DNA, or RNA) in the prediction request."""
     
     id: Optional[str] = Field(None, description="Unique identifier for the polymer (1-4 alphanumeric chars)")
     molecule_type: Literal["protein", "dna", "rna"] = Field(..., description="Type of molecule")
-    sequence: str = Field(..., max_length=4096, description="Sequence string (max 4096 characters)")
+    sequence: str = Field(..., min_length=1, max_length=4096, description="Sequence string (default NIM limit: 4096 characters)")
     cyclic: Optional[bool] = Field(False, description="Whether the polymer is cyclic")
     modifications: Optional[List[Modification]] = Field(default_factory=list, description="List of modifications")
     msa: Optional[Dict[str, Dict[str, AlignmentFileRecord]]] = Field(None, description="A Dictionary [database_name -> [format -> AlignmentFileRecord]] containing alignments")
@@ -120,7 +131,7 @@ class Polymer(BaseModel):
             return v
         
         if molecule_type == "protein":
-            valid_chars = set("ACDEFGHIKLMNPQRSTVWY")
+            valid_chars = set("ACDEFGHIKLMNPQRSTVWYX")
             if not all(c.upper() in valid_chars for c in v):
                 raise ValueError(f"Invalid amino acid characters in protein sequence: {v}")
         elif molecule_type == "dna":
@@ -155,14 +166,31 @@ class Polymer(BaseModel):
                 raise ValueError("Structural templates are only allowed for protein molecules")
         return v
 
+    @model_validator(mode='after')
+    def validate_polymer_features(self):
+        if self.msa is not None:
+            if self.molecule_type != 'protein':
+                raise ValueError("MSAs are only allowed for protein molecules")
+            if len(self.msa) > 3:
+                raise ValueError("Maximum 3 MSA database entries allowed")
+            for records in self.msa.values():
+                for fmt, record in records.items():
+                    if fmt != record.format:
+                        raise ValueError("MSA format key must match the alignment record format")
+        for modification in self.modifications or []:
+            if modification.position > len(self.sequence):
+                raise ValueError("Modification position exceeds the polymer length")
+        return self
 
-class Ligand(BaseModel):
+
+class Ligand(RequestModel):
     """Represents a ligand in the prediction request."""
     
     id: Optional[str] = Field(None, description="Chain ID for the ligand")
     smiles: Optional[str] = Field(None, description="SMILES string representation")
     ccd: Optional[str] = Field(None, description="Chemical Component Dictionary (CCD) code (1-5 uppercase letters/numbers)")
     predict_affinity: Optional[bool] = Field(False, description="Run affinity prediction for this ligand. Note: only one ligand per request can have this enabled")
+    output_affinity_embedding: bool = Field(False, description="Return affinity embeddings (NIM 1.8+; requires predict_affinity)")
     
     @field_validator('smiles')
     @classmethod
@@ -188,16 +216,16 @@ class Ligand(BaseModel):
             return v.strip().upper()
         return v
     
-    @field_validator('ccd')
-    @classmethod
-    def validate_smiles_or_ccd(cls, v, info: ValidationInfo):
+    @model_validator(mode='after')
+    def validate_smiles_or_ccd(self):
         """Ensure either SMILES or CCD is provided, but not both."""
-        smiles = info.data.get('smiles')
-        if smiles and v:
+        if self.smiles and self.ccd:
             raise ValueError("Cannot specify both SMILES and CCD code")
-        if not smiles and not v:
+        if not self.smiles and not self.ccd:
             raise ValueError("Must specify either SMILES or CCD code")
-        return v
+        if self.output_affinity_embedding and not self.predict_affinity:
+            raise ValueError("output_affinity_embedding requires predict_affinity=True")
+        return self
     
     @field_validator('id')
     @classmethod
@@ -209,10 +237,10 @@ class Ligand(BaseModel):
         return v
 
 
-class Atom(BaseModel):
+class Atom(RequestModel):
     """Represents an atom in constraints."""
-    id: Optional[str] = Field(None, description="Polymer/ligand ID (chain identifier)")
-    residue_index: int = Field(..., description="Residue index (1-based)")
+    id: str = Field(..., description="Polymer/ligand ID (chain identifier)")
+    residue_index: int = Field(..., gt=0, description="Residue index (1-based)")
     atom_name: str = Field(..., description="Atom name (e.g., 'CA', 'SG', 'C22')")
     
     @field_validator('id')
@@ -220,29 +248,29 @@ class Atom(BaseModel):
     def validate_id(cls, v):
         """Validate atom ID format to match server-side validation."""
         if v is not None:
-            if re.match(r'^[A-Z]+$', v) or re.match(r'^[A-Za-z0-9]{4}$', v):
+            if re.fullmatch(r'(?:[A-Z]{1,4}|[A-Za-z0-9]{4})', v):
                 return v
             else:
-                raise ValueError("Atom ID must be either one or more letters (A-Z) or exactly 4 alphanumeric characters")
+                raise ValueError("Atom ID must be 1-4 uppercase letters or exactly 4 alphanumeric characters")
         return v
 
 
-class Contact(BaseModel):
+class Contact(RequestModel):
     """Represents a contact residue in a pocket constraint."""
-    id: Optional[str] = Field(None, description="Chain identifier for the contact")
-    residue_index: int = Field(..., description="1-based index of the residue in the binding site")
+    id: str = Field(..., pattern=r'^([A-Z]{1,4}|[A-Za-z0-9]{4})$', description="Chain identifier for the contact")
+    residue_index: int = Field(..., gt=0, description="1-based index of the residue in the binding site")
 
 
-class PocketConstraint(BaseModel):
+class PocketConstraint(RequestModel):
     """Represents a pocket constraint defining a binding site."""
-    constraint_type: str = Field("pocket", description="Type of constraint")
+    constraint_type: Literal["pocket"] = Field("pocket", description="Type of constraint")
     binder: str = Field(..., description="ID of the binding molecule (e.g. ligand chain ID)")
     contacts: List[Contact] = Field(..., description="List of contacts defining the pocket")
 
 
-class BondConstraint(BaseModel):
+class BondConstraint(RequestModel):
     """Represents a bond constraint between atoms."""
-    constraint_type: str = Field("bond", description="Type of constraint")
+    constraint_type: Literal["bond"] = Field("bond", description="Type of constraint")
     atoms: List[Atom] = Field(..., description="List of atoms involved in the bond (exactly 2)")
     
     @field_validator('atoms')
@@ -254,9 +282,14 @@ class BondConstraint(BaseModel):
         return v
 
 
-class PredictionRequest(BaseModel):
+class PredictionRequest(RequestModel):
     """Complete prediction request model with all available Boltz-2 parameters."""
     
+    complex_id: Optional[str] = Field(
+        None, min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$",
+        description="NIM 1.9 artifact directory identifier; omitted uses prediction_timestamp"
+    )
+
     # Required parameters
     polymers: List[Polymer] = Field(..., description="List of polymers (DNA, RNA, or Protein) - max 12, min 1")
     
@@ -287,6 +320,10 @@ class PredictionRequest(BaseModel):
     )
     
     # Advanced parameters
+    max_parallel_samples: Optional[int] = Field(
+        None, ge=1, le=25,
+        description="Concurrent diffusion samples (NIM 1.9+); unset uses the server default"
+    )
     without_potentials: Optional[bool] = Field(
         False, 
         description="Whether to run without potentials (default: False)"
@@ -317,11 +354,11 @@ class PredictionRequest(BaseModel):
     # PAE/PDE output parameters (v1.5+)
     write_full_pae: Optional[bool] = Field(
         False,
-        description="Whether to save the full PAE (Predicted Aligned Error) matrix in the response (default: False)"
+        description="Write PAE matrices on the NIM server as NPZ files (JSON field is null in 1.9+)"
     )
     write_full_pde: Optional[bool] = Field(
         False,
-        description="Whether to save the full PDE (Predicted Distance Error) matrix in the response (default: False)"
+        description="Write PDE matrices on the NIM server as NPZ files (JSON field is null in 1.9+)"
     )
     
     @field_validator('polymers')
@@ -344,6 +381,10 @@ class PredictionRequest(BaseModel):
             affinity_ligands = [lig for lig in v if getattr(lig, 'predict_affinity', False)]
             if len(affinity_ligands) > 1:
                 raise ValueError("Only one ligand per request can have predict_affinity=True")
+            if affinity_ligands:
+                identities = [(lig.ccd, lig.smiles) for lig in v]
+                if len(set(identities)) != len(identities):
+                    raise ValueError("Duplicate CCD or SMILES values are not allowed with affinity prediction")
         return v
     
     @field_validator('constraints')
@@ -370,6 +411,7 @@ class StructureData(BaseModel):
 
 class PredictionResponse(BaseModel):
     """Complete prediction response model."""
+    model_config = ConfigDict(extra="allow")
     
     structures: List[StructureData] = Field(..., description="Predicted structures")
     confidence_scores: Optional[List[float]] = Field(None, description="Confidence scores for predictions")
@@ -396,11 +438,11 @@ class PredictionResponse(BaseModel):
     # Full error matrices (v1.5+)
     pae: Optional[List[List[List[float]]]] = Field(
         None, 
-        description="Full PAE (Predicted Aligned Error) matrix. Shape: [num_models, num_residues, num_residues]"
+        description="Legacy inline PAE matrices; deprecated and null in NIM 1.9+"
     )
     pde: Optional[List[List[List[float]]]] = Field(
         None, 
-        description="Full PDE (Predicted Distance Error) matrix. Shape: [num_models, num_residues, num_residues]"
+        description="Legacy inline PDE matrices; deprecated and null in NIM 1.9+"
     )
     
     @field_validator('structures')
@@ -473,51 +515,49 @@ ConstraintType = Literal["pocket", "bond"]
 
 # Add YAML configuration models at the end of the file
 
-class YAMLProtein(BaseModel):
+class YAMLProtein(RequestModel):
     """YAML protein configuration matching official Boltz format."""
     id: str = Field(..., description="Protein identifier")
     sequence: str = Field(..., description="Protein sequence")
     msa: Optional[str] = Field(None, description="Path to MSA file or 'empty'")
 
 
-class YAMLLigand(BaseModel):
+class YAMLLigand(RequestModel):
     """YAML ligand configuration matching official Boltz format."""
     id: str = Field(..., description="Ligand identifier")
     smiles: str = Field(..., description="SMILES string")
 
 
-class YAMLSequence(BaseModel):
+class YAMLSequence(RequestModel):
     """YAML sequence entry (protein or ligand)."""
     protein: Optional[YAMLProtein] = Field(None, description="Protein configuration")
     ligand: Optional[YAMLLigand] = Field(None, description="Ligand configuration")
     
-    @field_validator('ligand')
-    @classmethod
-    def validate_protein_or_ligand(cls, v, info: ValidationInfo):
+    @model_validator(mode='after')
+    def validate_protein_or_ligand(self):
         """Ensure either protein or ligand is specified, but not both."""
-        protein = info.data.get('protein')
-        if protein and v:
+        if self.protein and self.ligand:
             raise ValueError("Cannot specify both protein and ligand in the same sequence entry")
-        if not protein and not v:
+        if not self.protein and not self.ligand:
             raise ValueError("Must specify either protein or ligand in sequence entry")
-        return v
+        return self
 
 
-class YAMLAffinity(BaseModel):
+class YAMLAffinity(RequestModel):
     """YAML affinity property configuration."""
     binder: str = Field(..., description="ID of the binding molecule (ligand)")
 
 
-class YAMLProperties(BaseModel):
+class YAMLProperties(RequestModel):
     """YAML properties configuration."""
     affinity: Optional[YAMLAffinity] = Field(None, description="Affinity prediction configuration")
 
 
-class YAMLConfig(BaseModel):
+class YAMLConfig(RequestModel):
     """Complete YAML configuration matching official Boltz format."""
-    version: int = Field(1, description="Configuration version")
+    version: Literal[1] = Field(1, description="Configuration version")
     sequences: List[YAMLSequence] = Field(..., description="List of sequences (proteins and ligands)")
-    properties: Optional[YAMLProperties] = Field(None, description="Properties to predict")
+    properties: Optional[Union[YAMLProperties, List[YAMLProperties]]] = Field(None, description="Properties to predict; Boltz list or legacy client mapping")
     
     @field_validator('sequences')
     @classmethod
@@ -556,6 +596,14 @@ class YAMLConfig(BaseModel):
                 )
                 ligands.append(ligand)
         
+        properties = self.properties if isinstance(self.properties, list) else [self.properties]
+        for prop in properties:
+            if prop and prop.affinity:
+                matching = [lig for lig in ligands if lig.id == prop.affinity.binder]
+                if len(matching) != 1:
+                    raise ValueError("Affinity binder must identify exactly one ligand")
+                matching[0].predict_affinity = True
+
         return PredictionRequest(
             polymers=polymers,
             ligands=ligands if ligands else None
@@ -563,4 +611,4 @@ class YAMLConfig(BaseModel):
 
 
 # Convenience type aliases
-YAMLConfigType = YAMLConfig 
+YAMLConfigType = YAMLConfig

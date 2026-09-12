@@ -2,277 +2,157 @@
 
 Copyright (c) 2025-2026, NVIDIA CORPORATION. All rights reserved.
 
-[![PyPI version](https://badge.fury.io/py/boltz2-python-client.svg)](https://badge.fury.io/py/boltz2-python-client)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![PyPI](https://img.shields.io/pypi/v/boltz2-python-client)](https://pypi.org/project/boltz2-python-client/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A comprehensive Python client for NVIDIA's Boltz-2 biomolecular structure prediction service. This package provides both synchronous and asynchronous interfaces, a rich CLI, multi-endpoint load balancing, and notebook examples that visualize predicted structures with `py3Dmol` and Molstar.
+Python and command-line interfaces for NVIDIA Boltz-2 NIM: protein, DNA/RNA,
+ligand and covalent complexes, binding affinity, MSA integration, templates,
+and multi-endpoint screening.
 
-## Features
+Version **0.6.0** targets **NIM 1.9.0**. Releases are validated on
+[TestPyPI](https://test.pypi.org/project/boltz2-python-client/0.6.0/)
+before production publication. Select the matching index when installing.
+See [migration and compatibility](docs/migration-0.6.md).
 
-- **Boltz2 NIM v1.6 Support** — Compatible with the latest NVIDIA Boltz2 NIM
-- **Full API Coverage** — Protein folding, protein-ligand, covalent, DNA-protein, YAML configs
-- **Async & Sync Clients** — Choose your preferred programming style
-- **Rich CLI Interface** — Beautiful command-line tools with progress bars
-- **Flexible Endpoints** — Local deployments, NVIDIA hosted API, or AWS SageMaker
-- **Affinity Prediction** — Predict binding affinity (pIC50) for protein-ligand complexes
-- **Virtual Screening** — High-level API for drug discovery campaigns
-- **MSA Search Integration** — GPU-accelerated MSA generation with NVIDIA MSA Search NIM
-- **A3M to Multimer MSA** — Convert ColabFold A3M files to paired multimer format
-- **Multi-Endpoint Load Balancing** — Distribute predictions across multiple NIMs
-- **PAE/PDE Matrix Output** — Full Predicted Aligned Error and Distance Error matrices
-- **Structural Templates** — Template-guided structure prediction
+The source archive (`.tar.gz`) under the release page's **Download files** includes
+the current guides, scripts and notebooks. Relative links in this README refer
+to files in that extracted archive or a matching repository checkout.
 
-## Installation
+## Install
+
+Python 3.10 or newer:
 
 ```bash
-# From PyPI
-pip install boltz2-python-client
+# PyPI, after production publication
+python -m pip install boltz2-python-client==0.6.0
 
-# With SageMaker support
-pip install "boltz2-python-client[sagemaker]"
+# TestPyPI release and dependencies from PyPI
+python -m pip install --index-url https://test.pypi.org/simple/ \
+  --extra-index-url https://pypi.org/simple/ boltz2-python-client==0.6.0
 
-# From source
-git clone https://github.com/NVIDIA/digital-biology-examples.git
-cd digital-biology-examples/examples/nims/boltz-2
-pip install -e ".[dev]"
+# From this checkout or the extracted source archive
+python -m pip install -e '.[dev,notebooks]'
 ```
 
-## Quick Start
+Optional extras: `notebooks` (Jupyter and visualization), `sagemaker` (boto3),
+`analysis` (NumPy and structure conversion), and `screening` (pandas for CSV and
+DataFrame helpers). The Python client itself needs no GPU;
+a running NIM server performs inference.
 
-### Python API
+## Quick start
 
-```python
-import asyncio
-from boltz2_client import Boltz2Client
-
-async def main():
-    client = Boltz2Client(base_url="http://localhost:8000")
-
-    # Simple protein prediction
-    result = await client.predict_protein_structure(
-        sequence="MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLAGG"
-    )
-    print(f"Confidence: {result.confidence_scores[0]:.3f}")
-
-    # MSA-guided prediction
-    result = await client.predict_protein_structure(
-        sequence="MKTVRQERLK...",
-        msa_files=[("alignment.a3m", "a3m")],
-        recycling_steps=3,
-        sampling_steps=200,
-    )
-
-asyncio.run(main())
-```
-
-### Synchronous API
+Run against a ready local server. This sequence is an input-format example;
+confidence scores do not establish a biological interaction.
 
 ```python
+from pathlib import Path
 from boltz2_client import Boltz2SyncClient
 
-client = Boltz2SyncClient(base_url="http://localhost:8000")
-result = client.predict_protein_structure(sequence="MKTVRQ...")
-```
-
-### CLI
-
-```bash
-# Health check
-boltz2 health
-
-# Protein structure
-boltz2 protein "SEQUENCE" --recycling-steps 3 --sampling-steps 200
-
-# Protein-ligand with affinity
-boltz2 ligand "SEQUENCE" --smiles "CC(=O)OC1=CC=CC=C1C(=O)O" --predict-affinity
-
-# Covalent complex
-boltz2 covalent "SEQUENCE" --ccd U4U --bond A:11:SG:L:C22
-
-# Virtual screening
-boltz2 screen "SEQUENCE" compounds.csv -o results/
-
-# Multimer from A3M files
-boltz2 multimer-msa chain_A.a3m chain_B.a3m -c A,B -o complex.cif --save-all
-
-# Multi-endpoint load balancing
-boltz2 --multi-endpoint --base-url "http://gpu1:8000,http://gpu2:8000" protein "SEQUENCE"
-```
-
-## Configuration
-
-### Local Endpoint (Default)
-
-```python
-client = Boltz2Client(base_url="http://localhost:8000")
-```
-
-### NVIDIA Hosted Endpoint
-
-```python
-client = Boltz2Client(
-    base_url="https://health.api.nvidia.com",
-    api_key="your_api_key",  # or set NVIDIA_API_KEY env var
-    endpoint_type="nvidia_hosted",
-)
-```
-
-### AWS SageMaker Endpoint
-
-```python
-from boltz2_client import Boltz2SyncClient
-
-# Requires: pip install "boltz2-python-client[sagemaker]"
-# AWS credentials must be configured (e.g. via AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY
-# environment variables, ~/.aws/credentials, or an IAM role)
-
-client = Boltz2SyncClient(
-    endpoint_type="sagemaker",
-    sagemaker_endpoint_name="my-boltz2-endpoint",
-    sagemaker_region="us-east-1",
-)
-
-# Health check (calls describe_endpoint under the hood)
-health = client.health_check()
-print(f"Endpoint status: {health.status}")
-
-# Predict protein structure — same API as local/hosted endpoints
+client = Boltz2SyncClient(base_url="http://localhost:8000", timeout=600)
 result = client.predict_protein_structure(
     sequence="MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLAGG",
-    recycling_steps=3,
-    sampling_steps=200,
+    output_dir=Path("results/protein"),
 )
-print(f"Confidence: {result.confidence_scores[0]:.3f}")
+print(result.confidence_scores)
+```
 
-# Protein-ligand with affinity prediction
-result = client.predict_protein_ligand_complex(
-    protein_sequence="MKTVRQERLK...",
-    ligand_smiles="CC(=O)OC1=CC=CC=C1C(=O)O",
-    predict_affinity=True,
+For notebooks and asynchronous programs, use `Boltz2Client` and `await`:
+
+```python
+from boltz2_client import Boltz2Client, Ligand, Polymer, PredictionRequest
+
+client = Boltz2Client(timeout=600)
+request = PredictionRequest(
+    polymers=[Polymer(id="A", molecule_type="protein", sequence="MTEYKLVVVGACGVGKSALTIQLIQNHFVDEYDPT")],
+    ligands=[Ligand(id="L1", smiles="CC(=O)Oc1ccccc1C(=O)O",
+                    predict_affinity=True, output_affinity_embedding=True)],
+    diffusion_samples=2,
+    max_parallel_samples=1,  # NIM 1.9+: lower peak GPU memory
 )
+result = await client.predict(request, output_dir="results/complex")
+print(result.affinities["L1"].affinity_pic50)
+print(result.affinities["L1"].affinity_embedding)
 ```
+
+The second example demonstrates request syntax using a short protein fragment
+and aspirin; it is not a validated binding pair. Use full, appropriate target
+sequences and assess predictions against experimental evidence.
+
+## Endpoints
+
+| Deployment | Configuration | Prediction path |
+|---|---|---|
+| Local/self-hosted | `Boltz2Client(base_url="http://localhost:8000")` | `/biology/mit/boltz2/predict` |
+| NVIDIA hosted | `Boltz2Client(endpoint_type="nvidia_hosted")` | `/v1/biology/mit/boltz2/predict` |
+| SageMaker | `Boltz2Client(endpoint_type="sagemaker", sagemaker_endpoint_name="my-endpoint")` | boto3 `invoke_endpoint` |
+
+For hosted inference, supply the key through `NVIDIA_API_KEY` or `NGC_API_KEY`
+in the process environment (or `api_key` in Python). The default hosted base
+URL is `https://health.api.nvidia.com`. Local inference sends no authorization
+header. Hosted deployments may lag the container release; enable version-specific
+options only when that endpoint supports them.
+
+SageMaker requires the `sagemaker` extra and configured AWS credentials/region.
+See the [SageMaker connection example](docs/deployment.md#existing-sagemaker-endpoint).
+Use asynchronous clients in Jupyter; the synchronous wrapper uses `asyncio.run()`.
+
+## CLI
 
 ```bash
-# CLI — all commands work with SageMaker by adding the endpoint flags
-boltz2 --endpoint-type sagemaker --sagemaker-endpoint-name my-boltz2-endpoint health
-boltz2 --endpoint-type sagemaker --sagemaker-endpoint-name my-boltz2-endpoint \
-    protein "MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLAGG"
+boltz2 health
+boltz2 protein ACDEFGHIKLMNPQRSTVWY --output-dir results/protein
+boltz2 protein ACDEFGHIKLMNPQRSTVWY --diffusion-samples 2 --max-parallel-samples 1
+boltz2 ligand ACDEFGHIKLMNPQRSTVWY --smiles CC --predict-affinity --output-affinity-embedding
+boltz2 advanced --config-file examples/data/nim_1_9_request.json --output-dir results/advanced
+boltz2 --endpoint-type nvidia_hosted protein ACDEFGHIKLMNPQRSTVWY
+boltz2 --multi-endpoint --base-url http://gpu1:8000,http://gpu2:8000 protein ACDEFGHIKLMNPQRSTVWY
 ```
 
-## Supported Prediction Types
+These short sequences/ligands illustrate syntax. `boltz2 --help` lists all
+commands, including covalent constraints, YAML, MSA conversion and screening.
 
-| Type | CLI Command | Python Method |
-|------|-------------|---------------|
-| Protein folding | `protein` | `predict_protein_structure()` |
-| Protein-ligand | `ligand` | `predict_protein_ligand_complex()` |
-| Covalent complex | `covalent` | `predict_covalent_complex()` |
-| DNA-protein | `dna-protein` | `predict_dna_protein_complex()` |
-| Advanced | `advanced` | `predict_with_advanced_parameters()` |
-| YAML config | `yaml` | `predict_from_yaml_config()` |
-| Virtual screening | `screen` | `VirtualScreening.screen()` |
-| MSA search | `msa-search` | `client.search_msa()` |
-| Multimer MSA | `multimer-msa` | A3M conversion + `predict()` |
+## Results and matrices
 
-## Boltz-2 NIM v1.6 Parameter Limits
+`predict()` saves every structure as `structure_0.cif`, `structure_1.cif`, etc.,
+plus `prediction_response.json` (complete response), `prediction_metadata.json`
+(scores, affinities, embeddings and runtime metrics), and `affinities.json` when
+present. Use `save_structures=False` or CLI `--no-save` to suppress client output.
+Use separate output directories for separate predictions to avoid overwriting files.
 
-| Parameter | Range |
-|-----------|-------|
-| `recycling_steps` | 1–10 |
-| `diffusion_samples` | 1–25 |
-| `sampling_steps` | 10–1000 |
-| `polymers` | up to 12 |
-| `ligands` | up to 20 |
+**NIM 1.9 does not return full PAE/PDE matrices in JSON.** `write_full_pae=True`
+and `write_full_pde=True` create NPZ files on the server under
+`$NIM_OUTPUT_PATH/prediction_*/pae/` and `.../pde/`. `result.pae` and `result.pde`
+remain `None`. Mount the server output directory to retrieve these artifacts.
+Aggregate `complex_pde_scores` and `complex_ipde_scores` remain in the response.
+See [outputs](docs/outputs.md) for loading matrices and retaining results.
 
-## Local Deployment
+## Deploy a local server
+
+Follow [local deployment](docs/deployment.md), including GPU/driver prerequisites,
+NGC login, cache and output mounts. The pinned image is
+`nvcr.io/nim/mit/boltz2:1.9.0`. The deployment script checks GPU access before
+starting a container:
 
 ```bash
-export NGC_API_KEY=<your_key>
-export LOCAL_NIM_CACHE=~/.cache/nim
-mkdir -p $LOCAL_NIM_CACHE && chmod -R 777 $LOCAL_NIM_CACHE
-
-docker run -it --runtime=nvidia --shm-size=16G \
-    -p 8000:8000 -e NGC_API_KEY \
-    -v "$LOCAL_NIM_CACHE":/opt/nim/.cache \
-    nvcr.io/nim/mit/boltz2:1.6.0
+# Set NGC_API_KEY (or NVIDIA_API_KEY) in the environment first.
+export LOCAL_NIM_CACHE="$HOME/.cache/nim"
+export LOCAL_NIM_OUTPUT="$HOME/boltz2-output"
+bash scripts/start_local_nim.sh
 ```
 
-## Examples
+## Guides and examples
 
-The [`examples/`](https://github.com/NVIDIA/digital-biology-examples/tree/main/examples/nims/boltz-2/examples) directory contains tutorial scripts, notebooks, and standalone demos:
+Start with the [protein prediction notebook](examples/notebooks/01_protein_prediction.ipynb)
+and [example index](examples/README.md). Guides:
 
-**Tutorial Scripts** ([`examples/`](https://github.com/NVIDIA/digital-biology-examples/tree/main/examples/nims/boltz-2/examples)):
-
-| File | Description |
-|------|-------------|
-| `01_basic_protein_folding.py` | Simple protein structure prediction |
-| `02_protein_structure_prediction_with_msa.py` | MSA-guided predictions |
-| `03_protein_ligand_complex.py` | Protein-ligand complexes |
-| `04_covalent_bonding.py` | Covalent bond constraints |
-| `05_dna_protein_complex.py` | DNA-protein interactions |
-| `06_yaml_configurations.py` | YAML config files |
-| `07_advanced_parameters.py` | Advanced API parameters |
-| `08_affinity_prediction_simple.py` | Binding affinity prediction |
-| `09_virtual_screening.py` | Virtual screening |
-| `10_msa_search_integration.py` | GPU-accelerated MSA search + prediction |
-| `11_msa_search_large_protein.py` | Large protein MSA optimization |
-| `12_msa_affinity_prediction.py` | MSA-guided affinity prediction |
-| `13_a3m_to_multimer_csv.py` | A3M to multimer MSA conversion |
-
-**Notebooks** ([`examples/notebooks/`](https://github.com/NVIDIA/digital-biology-examples/tree/main/examples/nims/boltz-2/examples/notebooks)):
-
-| File | Description |
-|------|-------------|
-| `01_multimer_prediction.ipynb` | Heterodimer/homodimer prediction |
-| `02_cdk4_msa_affinity_prediction.ipynb` | CDK4-Palbociclib MSA + affinity workflow |
-| `03_colabfold_a3m_to_multimer.ipynb` | ColabFold A3M multimer pairing |
-
-## Documentation
-
-| Guide | Description |
-|-------|-------------|
-| [Parameters](https://github.com/NVIDIA/digital-biology-examples/blob/main/examples/nims/boltz-2/docs/parameters.md) | Detailed parameter documentation |
-| [YAML Configuration](https://github.com/NVIDIA/digital-biology-examples/blob/main/examples/nims/boltz-2/docs/yaml.md) | Working with YAML config files |
-| [Affinity Prediction](https://github.com/NVIDIA/digital-biology-examples/blob/main/examples/nims/boltz-2/docs/affinity_prediction.md) | Binding affinity (pIC50) guide |
-| [Virtual Screening](https://github.com/NVIDIA/digital-biology-examples/blob/main/examples/nims/boltz-2/docs/virtual_screening.md) | Drug discovery campaigns |
-| [MSA Search](https://github.com/NVIDIA/digital-biology-examples/blob/main/examples/nims/boltz-2/docs/msa_search.md) | GPU-accelerated MSA generation |
-| [A3M Multimer MSA](https://github.com/NVIDIA/digital-biology-examples/blob/main/examples/nims/boltz-2/docs/a3m_to_multimer_msa.md) | ColabFold A3M conversion |
-| [Multi-Endpoint](https://github.com/NVIDIA/digital-biology-examples/blob/main/examples/nims/boltz-2/docs/multi_endpoint.md) | Load balancing across NIMs |
-| [Covalent Complex](https://github.com/NVIDIA/digital-biology-examples/blob/main/examples/nims/boltz-2/docs/covalent_complex.md) | Covalent bond predictions |
-| [Async Guide](https://github.com/NVIDIA/digital-biology-examples/blob/main/examples/nims/boltz-2/docs/async.md) | Async programming best practices |
-| [Changelog](https://github.com/NVIDIA/digital-biology-examples/blob/main/examples/nims/boltz-2/CHANGELOG.md) | Release history |
-
-## Development
-
-```bash
-pip install -e ".[dev]"
-pytest tests/                                           # mock tests only
-pytest tests/ -m real_endpoint                          # live endpoint tests
-BOLTZ2_NIM_URL=http://your-nim:8000 pytest tests/ -v   # all tests
-```
-
-## Requirements
-
-- **Python** 3.8+
-- **Core**: httpx, pydantic, rich, click, PyYAML, aiofiles, aiohttp, py3Dmol
-- **Optional**: boto3 (SageMaker), pandas (dev)
+- [Parameters](docs/parameters.md), [migration](docs/migration-0.6.md), [outputs](docs/outputs.md)
+- [Affinity](docs/affinity_prediction.md), [covalent complexes](docs/covalent_complex.md)
+- [MSA search](docs/msa_search.md), [A3M multimer pairing](docs/a3m_to_multimer_msa.md)
+- [YAML subset](docs/yaml.md), [async usage](docs/async.md)
+- [Multiple endpoints](docs/multi_endpoint.md), [virtual screening](docs/virtual_screening.md)
+- [Validation and release procedure](docs/development.md), [changelog](CHANGELOG.md)
 
 ## License
 
-MIT License — see [LICENSE](https://github.com/NVIDIA/digital-biology-examples/blob/main/examples/nims/boltz-2/LICENSE). Third-party licenses in [licenses/](https://github.com/NVIDIA/digital-biology-examples/tree/main/examples/nims/boltz-2/licenses/).
-
-## Links
-
-- [NVIDIA BioNeMo](https://www.nvidia.com/en-us/clara/bionemo/)
-- [Boltz-2 Paper](https://cdn.prod.website-files.com/68404fd075dba49e58331ad9/6842ee1285b9af247ac5a122_boltz2.pdf)
-- [TestPyPI](https://test.pypi.org/project/boltz2-python-client/)
-
----
-
-## Disclaimer
-
-This software is provided as-is without warranties of any kind. No guarantees are made regarding the accuracy, reliability, or fitness for any particular purpose. The underlying models and APIs are experimental and subject to change without notice. Users are responsible for validating all results and assessing suitability for their specific use cases.
-
----
-
-**Made with care for the computational biology community**
+[MIT](LICENSE). Third-party assets retain their [licenses](licenses/README.md).
+NVIDIA NIM container and model terms are separate from the Python client license.

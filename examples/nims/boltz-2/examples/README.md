@@ -1,102 +1,51 @@
-# Boltz-2 Python Client Examples
+# Examples
 
-This directory contains comprehensive examples demonstrating the Boltz-2 Python client for biomolecular structure prediction.
+Install this checkout with `pip install -e ".[notebooks,screening]"` and set
+`BOLTZ2_NIM_URL` to a ready NIM 1.9.0 endpoint (default `http://localhost:8000`).
+Run Python scripts from the client directory. Outputs go under `results/examples`.
 
-## Directory Layout
+| Script | Run | Purpose |
+|---|---|---|
+| [predict.py](predict.py) | `python examples/predict.py` | Protein prediction |
+| [predict_yaml.py](predict_yaml.py) | `python examples/predict_yaml.py` | YAML request |
+| [screen.py](screen.py) | `python examples/screen.py` | Two-compound affinity screen |
+| [msa_search.py](msa_search.py) | `MSA_NIM_URL=http://localhost:8001 python examples/msa_search.py` | MSA search and prediction |
+| [paired_msa.py](paired_msa.py) | `python examples/paired_msa.py chain_A.a3m chain_B.a3m` | Precomputed paired alignments |
+| [nim_1_9.py](nim_1_9.py) | `python examples/nim_1_9.py` | Sampling, embeddings and matrix artifacts |
+| [multi_endpoint.py](multi_endpoint.py) | `python examples/multi_endpoint.py` | Endpoint dispatch |
 
-```
-examples/
-├── 01-13           Numbered tutorial scripts (progression)
-├── barnase_barstar_with_msa.py        Case study demo
-├── cdk4_msa_affinity_example.py       Case study demo
-├── comprehensive_multi_endpoint_demo.py   Multi-endpoint demo
-├── msa_search_simple_demo.py          Minimal MSA demo
-├── multi_endpoint_screening.py        Production screening demo
-├── data/           YAML configs, A3M files, JSON, support files
-└── notebooks/      Jupyter notebooks (tutorials + visualizations)
-```
-
-## Tutorial Scripts
-
-| # | File | Topic |
-|---|------|-------|
-| 01 | `01_basic_protein_folding.py` | Simple protein structure prediction from sequence |
-| 02 | `02_protein_structure_prediction_with_msa.py` | MSA integration and comparison |
-| 03 | `03_protein_ligand_complex.py` | SMILES/CCD ligand binding, pocket constraints |
-| 04 | `04_covalent_bonding.py` | Covalent bonds and disulfide bridges |
-| 05 | `05_dna_protein_complex.py` | DNA/RNA-protein complexes |
-| 06 | `06_yaml_configurations.py` | YAML config creation and parameter overrides |
-| 07 | `07_advanced_parameters.py` | Diffusion parameters, quality vs speed |
-| 08 | `08_affinity_prediction_simple.py` | Binding affinity (pIC50) prediction |
-| 09 | `09_virtual_screening.py` | High-throughput compound screening |
-| 10 | `10_msa_search_integration.py` | GPU-accelerated MSA search + prediction |
-| 11 | `11_msa_search_large_protein.py` | Large protein MSA optimization |
-| 12 | `12_msa_affinity_prediction.py` | MSA-guided affinity prediction |
-| 13 | `13_a3m_to_multimer_csv.py` | ColabFold A3M to Boltz-2 multimer CSV |
+The small script inputs demonstrate API use, not experimental accuracy.
+MSA Search is separate from Boltz2; select an installed database with `MSA_DATABASE`.
 
 ## Notebooks
 
-Located in `notebooks/`:
+From the repository root, install `python -m pip install -e ".[notebooks]"`, then
+run `jupyter lab examples/notebooks` in that environment. Run each notebook's
+cells in order. All five notebooks use the async Python API, show the connected
+NIM version, and target **NIM 1.9.0 / client 0.6.0**. Outputs go under
+`notebook_outputs` relative to the kernel directory; rerunning replaces files
+in the same output folder. The inline py3Dmol viewers require JavaScript/CDN access.
 
-| File | Topic |
-|------|-------|
-| `01_multimer_prediction.ipynb` | Heterodimer/homodimer prediction |
-| `02_cdk4_msa_affinity_prediction.ipynb` | CDK4-Palbociclib MSA + affinity workflow |
-| `03_colabfold_a3m_to_multimer.ipynb` | ColabFold A3M multimer pairing (notebook) |
-| `boltz2_demo.ipynb` | Client overview demo |
-| `boltz2_comprehensive_demo.ipynb` | All-features comprehensive demo |
-| `boltz2_nim_DNA_Protein_Complex_example_py3Dmol.ipynb` | DNA-protein with py3Dmol visualization |
-| `boltz2_nim_protein_ligand_covalent_complex_molstar_visualization.ipynb` | Covalent complex with Molstar visualization |
+| Notebook | Purpose |
+|---|---|
+| [01 · Protein prediction](notebooks/01_protein_prediction.ipynb) | Two samples, structural template and optional PAE/PDE files |
+| [02 · Protein complexes](notebooks/02_protein_complexes.ipynb) | Barnase–barstar, optional precomputed A3M pairing, two-copy input |
+| [03 · CDK4 affinity](notebooks/03_cdk4_affinity.ipynb) | Palbociclib, three embeddings, optional saved MSA or existing MSA service |
+| [04 · Protein–DNA](notebooks/04_protein_dna_complex.ipynb) | Two protein chains and reverse-complementary DNA strands |
+| [05 · Covalent ligand](notebooks/05_covalent_ligand.ipynb) | KRAS G12C–U4U bond constraint and inline viewer |
 
-## Standalone Demos
+Optional settings, supplied before launching Jupyter:
 
-| File | Topic |
-|------|-------|
-| `barnase_barstar_with_msa.py` | Barnase-barstar complex with MSA for both chains |
-| `cdk4_msa_affinity_example.py` | CDK4 MSA + affinity (script version of notebook 02) |
-| `comprehensive_multi_endpoint_demo.py` | All features with multi-endpoint orchestration |
-| `msa_search_simple_demo.py` | Minimal MSA NIM demo (search only) |
-| `multi_endpoint_screening.py` | Multi-endpoint virtual screening with load balancing |
+| Setting | Used by |
+|---|---|
+| `BOLTZ2_NIM_URL` | All notebooks; defaults to `http://localhost:8000` |
+| `BOLTZ2_SERVER_OUTPUT_DIR` | Notebook 01: accessible host directory mounted at `/opt/nim/output` |
+| `MULTIMER_A3M_A`, `MULTIMER_A3M_B` | Notebook 02: both per-chain A3M files, matching the configured sequences |
+| `CDK4_MSA_PATH` | Notebook 03: existing CDK4 A3M file; takes precedence over search |
+| `MSA_NIM_URL`, `MSA_DATABASE` | Notebook 03: existing MSA Search NIM 2.3.0; default database `pdb70_220313` |
 
-## Data Files
+No MSA service or database download is required for the default notebook flows.
+For SageMaker, use the [connection example](../docs/deployment.md#existing-sagemaker-endpoint).
 
-Located in `data/`:
-
-| File | Used By |
-|------|---------|
-| `protein_ligand.yaml` | `06_yaml_configurations.py` |
-| `multi_protein_complex.yaml` | `06_yaml_configurations.py` |
-| `sars_cov2_mpro_nirmatrelvir.yaml` | `06_yaml_configurations.py` |
-| `msa-kras-g12c_combined.a3m` | `02_protein_structure_prediction_with_msa.py` |
-| `kinase_y7w_affinity.json` | `08_affinity_prediction_simple.py` |
-| `cdk2_target.txt` | Reference sequence |
-| `cdk4_msa_affinity/` | CDK4 workflow results |
-
-## Quick Start
-
-```bash
-pip install -e .
-
-# Ensure Boltz-2 NIM is running locally, or set API key
-export NVIDIA_API_KEY=your_api_key_here
-
-python examples/01_basic_protein_folding.py
-```
-
-## Example Selection Guide
-
-| Goal | Recommended |
-|------|-------------|
-| Learn basics | `01`, `03`, `06` |
-| Improve accuracy | `02`, `07`, `10` |
-| Drug discovery | `03`, `04`, `08`, `09` |
-| Virtual screening | `09`, `multi_endpoint_screening.py` |
-| MSA-enhanced | `02`, `10`, `11`, `12` |
-| Multimer MSA | `13`, notebook `03` |
-| Production setup | `06`, `multi_endpoint_screening.py` |
-
-## Additional Resources
-
-- **Main Documentation**: `../README.md`
-- **Guides**: `../docs/` (parameters, YAML, async, MSA search, multi-endpoint, etc.)
-- **CLI Help**: `boltz2 --help`
+See [validation](../docs/development.md) for actual notebook and Bash CLI checks,
+and [outputs](../docs/outputs.md) for saved structures and PAE/PDE files.

@@ -56,7 +56,7 @@ def print_warning(message: str):
 @click.group()
 @click.version_option(_pkg_version, "-V", "--version", prog_name="boltz2",
                       message="%(prog)s %(version)s")
-@click.option('--base-url', default='http://localhost:8000', help='Service base URL (can be comma-separated for multiple endpoints)')
+@click.option('--base-url', default=None, help='Service base URL (can be comma-separated for multiple endpoints)')
 @click.option('--api-key', help='API key for NVIDIA hosted endpoints (or set NVIDIA_API_KEY env var)')
 @click.option('--endpoint-type',
               type=click.Choice(['local', 'nvidia_hosted', 'sagemaker']),
@@ -109,6 +109,9 @@ def cli(ctx, base_url: str, api_key: Optional[str], endpoint_type: str,
     export SAGEMAKER_ENDPOINT_NAME=my-boltz2-endpoint
     boltz2 --endpoint-type sagemaker protein "MKTVRQERLK..."
     """
+    if base_url is not None and not base_url.strip():
+        raise click.BadParameter("must not be empty", param_hint="--base-url")
+    base_url = base_url or ("https://health.api.nvidia.com" if endpoint_type == "nvidia_hosted" else "http://localhost:8000")
     ctx.ensure_object(dict)
     ctx.obj['base_url'] = base_url
     ctx.obj['api_key'] = api_key

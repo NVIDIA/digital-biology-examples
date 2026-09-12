@@ -379,50 +379,41 @@ sequences:
                 os.unlink(yaml_file)
 
     # Test 8: Screen Command
-    def test_screen_single_endpoint(self, cli_runner, mock_single_client):
-        """Test screen command with single endpoint."""
-        with patch('boltz2_client.cli.create_client', return_value=mock_single_client):
-            # Create temporary compounds file
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
-                f.write("name,smiles\nAspirin,CC(=O)OC1=CC=CC=C1C(=O)O\n")
-                compounds_file = f.name
-            
-            try:
-                result = cli_runner.invoke(cli, [
-                    '--base-url', 'http://localhost:8000',
-                    'screen', 'MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLAGG',
-                    compounds_file,
-                    '--target-name', 'CDK2'
-                ])
-                
-                # Screen command might not be fully implemented in CLI yet
-                # This test checks the basic structure
-                assert result.exit_code in [0, 1]  # Allow for not implemented
-            finally:
-                os.unlink(compounds_file)
+    def test_screen_single_endpoint(self, cli_runner, tmp_path):
+        """Screening success returns zero and saves metadata."""
+        from boltz2_client.virtual_screening import VirtualScreeningResult
+        library = tmp_path / "compounds.csv"
+        library.write_text("name,smiles\nethanol,CCO\n")
+        output = tmp_path / "output"
+        result = VirtualScreeningResult("target", "ACDEFGHIKLMNPQRSTVWY",
+            [{"compound_name": "ethanol", "smiles": "CCO", "confidence_score": 0.7}], { }, 0.1)
+        with patch('boltz2_client.virtual_screening.VirtualScreening.screen', return_value=result):
+            response = cli_runner.invoke(cli, [
+                "screen", "ACDEFGHIKLMNPQRSTVWY", str(library), "--no-affinity",
+                "--output-dir", str(output),
+            ])
+        assert response.exit_code == 0, response.output
+        import json
+        metadata = json.loads((output / "screening_metadata.json").read_text())
+        assert metadata["failed_predictions"] == 0
     
-    def test_screen_multi_endpoint(self, cli_runner, mock_multi_endpoint_client):
-        """Test screen command with multiple endpoints."""
-        with patch('boltz2_client.cli.create_client', return_value=mock_multi_endpoint_client):
-            # Create temporary compounds file
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
-                f.write("name,smiles\nAspirin,CC(=O)OC1=CC=CC=C1C(=O)O\n")
-                compounds_file = f.name
-            
-            try:
-                result = cli_runner.invoke(cli, [
-                    '--multi-endpoint',
-                    '--base-url', 'http://localhost:8000,http://localhost:8001',
-                    'screen', 'MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLAGG',
-                    compounds_file,
-                    '--target-name', 'CDK2'
-                ])
-                
-                # Screen command might not be fully implemented in CLI yet
-                # This test checks the basic structure
-                assert result.exit_code in [0, 1]  # Allow for not implemented
-            finally:
-                os.unlink(compounds_file)
+    def test_screen_multi_endpoint(self, cli_runner, tmp_path):
+        """Screening failures return nonzero after saving metadata."""
+        from boltz2_client.virtual_screening import VirtualScreeningResult
+        library = tmp_path / "compounds.csv"
+        library.write_text("name,smiles\nethanol,CCO\n")
+        output = tmp_path / "output"
+        result = VirtualScreeningResult("target", "ACDEFGHIKLMNPQRSTVWY",
+            [{"compound_name": "ethanol", "error": "prediction failed"}], { }, 0.1)
+        with patch('boltz2_client.virtual_screening.VirtualScreening.screen', return_value=result):
+            response = cli_runner.invoke(cli, ["--multi-endpoint",
+                "screen", "ACDEFGHIKLMNPQRSTVWY", str(library), "--no-affinity",
+                "--output-dir", str(output),
+            ])
+        assert response.exit_code == 1, response.output
+        import json
+        metadata = json.loads((output / "screening_metadata.json").read_text())
+        assert metadata["failed_predictions"] == 1
 
     # Test 9: CLI Options and Flags
     def test_cli_multi_endpoint_flag(self, cli_runner):
@@ -474,16 +465,17 @@ sequences:
         assert result.exit_code != 0 or "error" in out or "unhealthy" in out
     
     def test_cli_missing_endpoints(self, cli_runner):
-        """Test CLI with missing endpoints."""
-        result = cli_runner.invoke(cli, [
-            '--multi-endpoint',
-            '--base-url', '',
-            'health'
-        ])
-        
-        # Should handle gracefully or show appropriate error
-        out = result.output.lower()
-        assert result.exit_code != 0 or "error" in out or "unhealthy" in out
+        """An explicitly empty URL must fail before contacting any service."""
+        with patch('boltz2_client.cli.create_client') as create_client:
+            result = cli_runner.invoke(cli, [
+                '--multi-endpoint',
+                '--base-url', '',
+                'health'
+            ])
+        assert result.exit_code == 2
+        assert "--base-url" in result.output
+        assert "must not be empty" in result.output
+        create_client.assert_not_called()
 
     # Test 11: Environment Variable Support
     def test_cli_environment_variables(self, cli_runner):
