@@ -1,0 +1,83 @@
+# Event configuration. Copy with `scripts/event.py new <slug>`, edit, then
+# `scripts/event.py build <slug>` to produce events/<slug>/index.html,
+# README.md and the printable coupon PDF.
+
+event:
+  name: "ClawBio Boston - Agents for Science"   # top bar, page <title>, README heading
+  kind: hackathon                        # "workshop", "hackathon", ... used in body copy
+
+page:
+  eyebrow: Attendee Setup Guide
+  heading: Get ready for the labs
+  intro: >-
+    A few quick steps: create a Brev account, add your workshop credits, and
+    launch the hands-on labs. This takes about five minutes.
+  resources_intro: >-
+    Keep building after the workshop. These open-source NVIDIA blueprints and
+    toolkits are a great place to go deeper.
+  footer: Need help? Flag down a workshop facilitator — we're here to get you running.
+
+brev_url: https://brev.nvidia.com/
+
+credits:
+  amount: "$25"                   # e.g. "$25"; blank = read from the codes spreadsheet, else "$10"
+  expires: "October 1, 2026"                  # e.g. "October 1, 2026"; blank = read from the spreadsheet if it mentions one
+
+# Brev launchables. Omit or leave empty to drop the "Launch the labs" step.
+labs:
+  - title: Run Qwen3.6-27B-FP8 on 1×RTX Pro 6000
+    url: https://brev.nvidia.com/launchable/deploy?launchableID=env-3GPBDpmGQwKUiQ5VlxpmA19yKEH
+    # description: Optional one-line summary shown under the title
+
+# "What's next" cards. Omit or leave empty to drop the section.
+resources:
+  - eyebrow: Agent skills and tools
+    title: BioNeMo Agent Toolkit
+    links:
+      - label: Blog Post
+        url: https://developer.nvidia.com/blog/build-an-ai-scientist-for-life-science-discovery-with-nvidia-bionemo-agent-toolkit/
+        primary: true
+      - label: GitHub Repo
+        url: https://github.com/NVIDIA-BioNeMo/bionemo-agent-toolkit
+  - eyebrow: Genomics AI Blueprint
+    title: Genomics Analysis with Parabricks
+    links:
+      - label: Parabricks Docs
+        url: https://docs.nvidia.com/clara/parabricks
+        primary: true
+      - label: GitHub Repo
+        url: https://github.com/NVIDIA-AI-Blueprints/genomics-analysis/tree/main
+  - eyebrow: Single Cell Analysis AI Blueprint
+    title: Single-Cell Analysis with RAPIDS Single Cell
+    links:
+      - label: RAPIDS Single Cell Docs
+        url: https://rapids-singlecell.readthedocs.io/en/latest/
+        primary: true
+      - label: GitHub Repo
+        url: https://github.com/NVIDIA-AI-Blueprints/single-cell-analysis-blueprint
+  - eyebrow: Publication data, models, and tools
+    title: NVIDIA BioNeMo GitHub Organization
+    links:
+      - label: GitHub Org
+        url: https://github.com/NVIDIA-BioNeMo
+  - eyebrow: Recipes
+    title: NVIDIA BioNeMo Recipes
+    links:
+      - label: BioNeMo Recipes Docs
+        url: https://docs.nvidia.com/bionemo-framework/latest/main/recipes/
+        primary: true
+      - label: GitHub Repo
+        url: https://github.com/NVIDIA-BioNeMo/bionemo-recipes
+
+
+coupons:
+  codes: codes/clawbio-bos-codes.xlsx   # XLSX from Brev, relative to the repo root (or pass --codes FILE.xlsx)
+  code_pattern: ""             # optional regex a cell must fully match to count as a code
+  title: "ClawBio Boston Hackathon"
+  subtitle: ""                 # defaults to "Redeem your <amount> compute credit"
+  url: https://nvidia.github.io/digital-biology-examples/clawbio-bos/   # where attendees start — usually the published event page
+  url_label: ""                # text printed on the coupon; defaults to url without https://
+  columns: 2
+  rows: 5                      # 2 x 5 = 10 coupons per Letter page (use rows: 4 for 8)
+  margin_in: 0.4               # page margin in inches
+  output: coupons.pdf          # written inside events/<slug>/
