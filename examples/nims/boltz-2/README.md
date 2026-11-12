@@ -106,10 +106,15 @@ boltz2 ligand ACDEFGHIKLMNPQRSTVWY --smiles CC --predict-affinity --output-affin
 boltz2 advanced --config-file examples/data/nim_1_9_request.json --output-dir results/advanced
 boltz2 --endpoint-type nvidia_hosted protein ACDEFGHIKLMNPQRSTVWY
 boltz2 --multi-endpoint --base-url http://gpu1:8000,http://gpu2:8000 protein ACDEFGHIKLMNPQRSTVWY
+boltz2 --base-url http://nim:8000 multimer-msa A.a3m B.a3m -c A,B --complex-id A_B --write-full-pae --write-full-pde
 ```
 
 These short sequences/ligands illustrate syntax. `boltz2 --help` lists all
 commands, including covalent constraints, YAML, MSA conversion and screening.
+Use `--complex-id` on single-prediction commands to name the NIM 1.9+ server-side
+artifact directory. Reusing an ID creates a timestamp-suffixed directory instead
+of overwriting the existing one. The `advanced` command can set the same field in
+its JSON request body.
 
 ## Results and matrices
 
@@ -121,10 +126,10 @@ Use separate output directories for separate predictions to avoid overwriting fi
 
 **NIM 1.9 does not return full PAE/PDE matrices in JSON.** `write_full_pae=True`
 and `write_full_pde=True` create NPZ files on the server under
-`$NIM_OUTPUT_PATH/prediction_*/pae/` and `.../pde/`. `result.pae` and `result.pde`
-remain `None`. Mount the server output directory to retrieve these artifacts.
-Aggregate `complex_pde_scores` and `complex_ipde_scores` remain in the response.
-See [outputs](docs/outputs.md) for loading matrices and retaining results.
+`$NIM_OUTPUT_PATH/<complex-id or prediction_*/pae` and `.../pde/`. `result.pae` and `result.pde` remain
+`None`. Mount the server output directory to retrieve these artifacts. Aggregate
+`complex_pde_scores` and `complex_ipde_scores` remain in the response. See
+[outputs](docs/outputs.md) for loading matrices and retaining results.
 
 ## Deploy a local server
 

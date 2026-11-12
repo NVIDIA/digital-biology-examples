@@ -13,6 +13,7 @@ DNA-protein complexes, and advanced parameter control.
 import asyncio
 import json
 import os
+import re
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -51,6 +52,28 @@ def print_info(message: str):
 def print_warning(message: str):
     """Print warning message."""
     console.print(f"\u26a0\ufe0f {message}", style="yellow")
+
+
+_COMPLEX_ID_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
+
+
+def _validate_complex_id(ctx, param, value):
+    """Validate NIM server artifact directory identifiers before work starts."""
+    if value is not None and not _COMPLEX_ID_RE.fullmatch(value):
+        raise click.BadParameter("must be 1-64 characters from A-Z, a-z, 0-9, '_' and '-'")
+    return value
+
+
+complex_id_option = click.option(
+    "--complex-id",
+    default=None,
+    callback=_validate_complex_id,
+    help=(
+        "Name for this prediction's server-side output folder: "
+        "NIM_OUTPUT_PATH/<complex-id>/ (NIM 1.9+). Reusing an ID adds a "
+        "_<timestamp> suffix. Default: prediction_<timestamp>."
+    ),
+)
 
 
 @click.group()
