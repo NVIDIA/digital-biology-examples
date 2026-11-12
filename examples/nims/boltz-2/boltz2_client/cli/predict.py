@@ -21,7 +21,7 @@ from ..models import (
     PredictionRequest, Polymer, Ligand, BondConstraint,
     Atom, AlignmentFileRecord,
 )
-from . import cli, console, print_success, print_error, print_info, print_warning
+from . import cli, console, print_success, print_error, print_info, print_warning, complex_id_option
 
 
 def create_client(ctx):
@@ -49,13 +49,14 @@ def create_client(ctx):
               help='Write PAE NPZ files under NIM_OUTPUT_PATH on the NIM 1.9+ server')
 @click.option('--write-full-pde', is_flag=True, default=False,
               help='Write PDE NPZ files under NIM_OUTPUT_PATH on the NIM 1.9+ server')
+@complex_id_option
 @click.option('--output-format', type=click.Choice(['cif', 'pdb']), default='cif',
               help='Output structure format: cif (default) or pdb')
 @click.pass_context
 def protein(ctx, sequence: str, polymer_id: str, recycling_steps: int, sampling_steps: int,
            diffusion_samples: int, step_scale: float, msa_file: List[Tuple[str, str]], 
            output_dir: str, no_save: bool, write_full_pae: bool, write_full_pde: bool,
-           output_format: str, max_parallel_samples: Optional[int]):
+           complex_id: Optional[str], output_format: str, max_parallel_samples: Optional[int]):
     """
     Predict protein structure with optional MSA guidance.
     
@@ -122,7 +123,8 @@ def protein(ctx, sequence: str, polymer_id: str, recycling_steps: int, sampling_
                 max_parallel_samples=max_parallel_samples,
                 step_scale=step_scale,
                 write_full_pae=write_full_pae,
-                write_full_pde=write_full_pde
+                write_full_pde=write_full_pde,
+                complex_id=complex_id
             )
             
             with Progress(
@@ -167,7 +169,7 @@ def protein(ctx, sequence: str, polymer_id: str, recycling_steps: int, sampling_
                             print_info(f"Converted to PDB: {pdb_path}")
             
             if write_full_pae or write_full_pde:
-                print_info("NIM 1.9+ writes matrices under server NIM_OUTPUT_PATH/prediction_*/{pae,pde}/. The JSON pae/pde fields are null; mount the server output directory to access NPZ files.")
+                print_info("NIM 1.9+ writes matrices under server NIM_OUTPUT_PATH/<complex-id or prediction_<timestamp>>/{pae,pde}/. The JSON pae/pde fields are null; mount the server output directory to access NPZ files.")
 
             # Save legacy inline matrices if available
             if not no_save and write_full_pae and result.pae:
@@ -210,13 +212,15 @@ def protein(ctx, sequence: str, polymer_id: str, recycling_steps: int, sampling_
               help='MSA file and format (can be specified multiple times)')
 @click.option('--output-dir', type=click.Path(), default='.', help='Directory to save output files (structure_0.cif, prediction_metadata.json). Default: current directory')
 @click.option('--no-save', is_flag=True, help='Do not save structure files')
+@complex_id_option
 @click.pass_context
 def ligand(ctx, protein_sequence: str, smiles: Optional[str], ccd: Optional[str],
           protein_id: str, ligand_id: str, pocket_residues: Optional[str],
           recycling_steps: int, sampling_steps: int, predict_affinity: bool,
           sampling_steps_affinity: int, diffusion_samples_affinity: int, 
           affinity_mw_correction: bool, msa_file: List[Tuple[str, str]], 
-          output_dir: str, no_save: bool, output_affinity_embedding: bool):
+          output_dir: str, no_save: bool, output_affinity_embedding: bool,
+          complex_id: Optional[str]):
     """
     Predict protein-ligand complex structure with optional MSA guidance.
     
@@ -297,7 +301,8 @@ def ligand(ctx, protein_sequence: str, smiles: Optional[str], ccd: Optional[str]
                     save_structures=not no_save,
                     msa_files=msa_files if msa_files else None,
                     output_dir=Path(output_dir),
-                    progress_callback=progress_callback
+                    progress_callback=progress_callback,
+                    **({"complex_id": complex_id} if complex_id else {})
                 )
                 
                 progress.update(task, description="Prediction completed!")
@@ -384,10 +389,12 @@ def ligand(ctx, protein_sequence: str, smiles: Optional[str], ccd: Optional[str]
 @click.option('--sampling-steps', default=50, type=click.IntRange(10, 1000))
 @click.option('--output-dir', type=click.Path(), default='.', help='Directory to save output files (structure_0.cif, prediction_metadata.json). Default: current directory')
 @click.option('--no-save', is_flag=True, help='Do not save structure files')
+@complex_id_option
 @click.pass_context
 def covalent(ctx, protein_sequence: str, ccd: Optional[str],
             bonds: List[str], disulfides: List[str], protein_id: str, ligand_id: str, 
-            recycling_steps: int, sampling_steps: int, output_dir: str, no_save: bool):
+            recycling_steps: int, sampling_steps: int, output_dir: str, no_save: bool,
+            complex_id: Optional[str]):
     """
     Predict covalent complex structure with flexible bond constraints.
     
@@ -533,7 +540,8 @@ def covalent(ctx, protein_sequence: str, ccd: Optional[str],
                     sampling_steps=sampling_steps,
                     save_structures=not no_save,
                     output_dir=Path(output_dir),
-                    progress_callback=progress_callback
+                    progress_callback=progress_callback,
+                    **({"complex_id": complex_id} if complex_id else {})
                 )
                 
                 progress.update(task, description="Prediction completed!")
@@ -565,10 +573,12 @@ def covalent(ctx, protein_sequence: str, ccd: Optional[str],
 @click.option('--concatenate-msas', is_flag=True, help='Concatenate MSAs for polymers')
 @click.option('--output-dir', type=click.Path(), default='.', help='Directory to save output files (structure_0.cif, prediction_metadata.json). Default: current directory')
 @click.option('--no-save', is_flag=True, help='Do not save structure files')
+@complex_id_option
 @click.pass_context
 def dna_protein(ctx, protein_sequences: str, dna_sequences: str, protein_ids: Optional[str],
                dna_ids: Optional[str], recycling_steps: int, sampling_steps: int,
-               concatenate_msas: bool, output_dir: str, no_save: bool):
+               concatenate_msas: bool, output_dir: str, no_save: bool,
+               complex_id: Optional[str]):
     """
     Predict DNA-protein complex structure.
     
@@ -618,7 +628,8 @@ def dna_protein(ctx, protein_sequences: str, dna_sequences: str, protein_ids: Op
                     concatenate_msas=concatenate_msas,
                     save_structures=not no_save,
                     output_dir=Path(output_dir),
-                    progress_callback=progress_callback
+                    progress_callback=progress_callback,
+                    **({"complex_id": complex_id} if complex_id else {})
                 )
                 
                 progress.update(task, description="Prediction completed!")
@@ -732,10 +743,11 @@ def advanced(ctx, config_file: str, output_dir: str, no_save: bool):
 @click.option('--step-scale', default=1.638, type=click.FloatRange(0.5, 5.0))
 @click.option('--output-dir', type=click.Path(), default='.', help='Directory to save output files (structure_0.cif, prediction_metadata.json). Default: current directory')
 @click.option('--no-save', is_flag=True, help='Do not save structure files')
+@complex_id_option
 @click.pass_context
 def yaml_config(ctx, yaml_file: str, msa_dir: Optional[str], recycling_steps: int, 
          sampling_steps: int, diffusion_samples: int, step_scale: float,
-         output_dir: str, no_save: bool):
+         output_dir: str, no_save: bool, complex_id: Optional[str]):
     """
     Run prediction from YAML configuration file (official Boltz format).
     
@@ -859,6 +871,8 @@ def yaml_config(ctx, yaml_file: str, msa_dir: Optional[str], recycling_steps: in
                 request.sampling_steps = sampling_steps
                 request.diffusion_samples = diffusion_samples
                 request.step_scale = step_scale
+                if complex_id is not None:
+                    request.complex_id = complex_id
                 
                 result = await client.predict(
                     request,

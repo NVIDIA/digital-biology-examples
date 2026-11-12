@@ -18,7 +18,7 @@ from ..client import Boltz2Client
 from ..models import (
     PredictionRequest, Polymer, Ligand, AlignmentFileRecord,
 )
-from . import cli, console, print_success, print_error, print_info, print_warning
+from . import cli, console, print_success, print_error, print_info, print_warning, complex_id_option
 
 
 def create_client(ctx):
@@ -141,11 +141,13 @@ def msa_search_command(ctx, sequence: str, endpoint: str, databases: List[str],
               help='Directory to save output files')
 @click.option('--no-save-msa', is_flag=True,
               help="Don't save the MSA file separately")
+@complex_id_option
 @click.pass_context
 def msa_predict_command(ctx, sequence: str, endpoint: str, databases: List[str],
                         max_sequences: int, e_value: float,
                         recycling_steps: int, sampling_steps: int,
-                        output_dir: str, no_save_msa: bool):
+                        output_dir: str, no_save_msa: bool,
+                        complex_id: Optional[str]):
     """
     Perform MSA search and structure prediction in one step.
     
@@ -204,7 +206,8 @@ def msa_predict_command(ctx, sequence: str, endpoint: str, databases: List[str],
                     max_msa_sequences=max_sequences,
                     e_value=e_value,
                     recycling_steps=recycling_steps,
-                    sampling_steps=sampling_steps
+                    sampling_steps=sampling_steps,
+                    **({"complex_id": complex_id} if complex_id else {})
                 )
                 
                 progress.update(task, completed=100)
@@ -271,12 +274,14 @@ def msa_predict_command(ctx, sequence: str, endpoint: str, databases: List[str],
               help='Number of sampling steps (default: 50)')
 @click.option('--output-dir', type=click.Path(), default='.',
               help='Directory to save output files')
+@complex_id_option
 @click.pass_context
 def msa_ligand_command(ctx, protein_sequence: str, smiles: Optional[str], ccd: Optional[str],
                        endpoint: str, databases: List[str], max_sequences: int, e_value: float,
                        predict_affinity: bool, sampling_steps_affinity: int,
                        diffusion_samples_affinity: int, affinity_mw_correction: bool,
-                       recycling_steps: int, sampling_steps: int, output_dir: str):
+                       recycling_steps: int, sampling_steps: int, output_dir: str,
+                       complex_id: Optional[str]):
     """
     MSA search + protein-ligand prediction with optional affinity.
     
@@ -358,7 +363,8 @@ def msa_ligand_command(ctx, protein_sequence: str, smiles: Optional[str], ccd: O
                     diffusion_samples_affinity=diffusion_samples_affinity if predict_affinity else None,
                     affinity_mw_correction=affinity_mw_correction if predict_affinity else None,
                     save_structures=True,
-                    output_dir=Path(output_dir)
+                    output_dir=Path(output_dir),
+                    **({"complex_id": complex_id} if complex_id else {})
                 )
                 
                 progress.update(task, completed=100)
@@ -562,6 +568,7 @@ def convert_msa_command(ctx, a3m_files: Tuple[str, ...], chain_ids: str,
               help='Write PAE NPZ files on the NIM 1.9+ server')
 @click.option('--write-full-pde', is_flag=True, default=False,
               help='Write PDE NPZ files on the NIM 1.9+ server')
+@complex_id_option
 @click.option('--output-format', type=click.Choice(['cif', 'pdb']), default='cif',
               help='Output structure format: cif (default) or pdb')
 @click.pass_context
@@ -570,7 +577,7 @@ def multimer_msa_command(ctx, a3m_files: Tuple[str, ...], chain_ids: str,
                          max_pairs: Optional[int], pairing_mode: str, include_unpaired: bool,
                          recycling_steps: int, sampling_steps: int, 
                          diffusion_samples: int, write_full_pae: bool, write_full_pde: bool,
-                         output_format: str):
+                         complex_id: Optional[str], output_format: str):
     """
     Predict multimer structure from ColabFold A3M monomer MSA files.
     
@@ -711,7 +718,8 @@ def multimer_msa_command(ctx, a3m_files: Tuple[str, ...], chain_ids: str,
             sampling_steps=sampling_steps,
             diffusion_samples=diffusion_samples,
             write_full_pae=write_full_pae,
-            write_full_pde=write_full_pde
+            write_full_pde=write_full_pde,
+            complex_id=complex_id
         )
         
         # Step 5: Get client (supports multi-endpoint mode)
@@ -826,7 +834,7 @@ def multimer_msa_command(ctx, a3m_files: Tuple[str, ...], chain_ids: str,
                     print_info(f"pTM: {response.ptm_scores[0]:.4f}")
             
             if write_full_pae or write_full_pde:
-                print_info("NIM 1.9+ matrix files are under server NIM_OUTPUT_PATH; JSON pae/pde fields are null.")
+                print_info("NIM 1.9+ matrix files are under server NIM_OUTPUT_PATH/<complex-id or prediction_<timestamp>>/{pae,pde}/; JSON pae/pde fields are null.")
 
             # Save legacy inline PAE matrix if available
             if write_full_pae and response.pae:
